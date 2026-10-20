@@ -4,7 +4,9 @@ Este módulo contiene la construcción reproducible de la imagen propia y la def
 
 ```text
 deployment/
-├── Dockerfile                    # Imagen multi-stage de Frappe/ERPNext/app propia
+├── DEVOPS.md                      # Procedimiento de cambios operativos
+├── README.md                      # Este mapa
+├── Dockerfile                     # Imagen multi-stage de Frappe/ERPNext/app propia
 ├── docker-compose.yml             # Stack principal y volúmenes nombrados
 ├── erp.ps1                        # Init, build, start, verify, backup y restore
 ├── config/
@@ -25,5 +27,7 @@ deployment/
 ├── backups/                       # Bundles locales ignorados
 └── reports/                       # Evidencia local ignorada
 ```
+
+Durante una ejecución también pueden existir `.env`, `.secrets/`, `backups/` y `reports/`. Son datos locales ignorados por Git y no forman parte del módulo versionado.
 
 Las operaciones normales se ejecutan desde la raíz con `.\deployment\erp.ps1 -Action <Init|Build|Start|Status|Verify|Backup|Restore>`.

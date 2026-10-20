@@ -16,11 +16,11 @@ Workspace autorizado: `C:\Users\olive\Proyectos\metalmechanics_custom_erp`. Se u
 | ERPNext | v16.51.1 | 5af6561f5aa48104559692fb4fd82f2580e8d338 |
 | frappe_docker | snapshot del 2026-10-20 | df2a3b72910634cf0e878b59eccf68a93736bf9d |
 
-Las fuentes externas son submódulos en `vendor/`. La aplicación propia se creará en `apps/metalmecanica/` durante la fase 1 autorizada. El Dockerfile y Compose propios también corresponden a esa fase.
+Las fuentes externas son submódulos en `vendor/`. La aplicación propia estable vive en `apps/metalmecanica/`. La vía experimental paralela vive en `apps_ind/metalmecanica/`; reutiliza la imagen estable como base y permite comparar una app independizada sin cambiar el arranque principal.
 
 Al preparar otra copia autorizada del proyecto, usar `git submodule update --init --recursive` para recuperar los commits registrados. Evitar `git submodule update --remote` en construcciones. Las actualizaciones deben revisar los cambios y actualizar los punteros junto con el registro de fuentes.
 
-Para iniciar el entorno local, usa `.\deployment\erp.ps1 -Action Start`. La interfaz queda en [http://127.0.0.1:8080](http://127.0.0.1:8080). La contraseña inicial de `Administrator` se conserva únicamente en `deployment/.secrets/admin_password`.
+Para iniciar el entorno local, usa `.\deployment\erp.ps1 -Action Start`. La interfaz queda en [http://127.0.0.1:8080](http://127.0.0.1:8080). La contraseña inicial de `Administrator` se conserva únicamente en `deployment/.secrets/admin_password`.`r`n`r`nPara levantar la comparación independiente, ejecuta `.\deployment\erp-independent.ps1 -Action Start`. Queda en [http://127.0.0.1:8081](http://127.0.0.1:8081), con el sitio `metalmecanica-ind.localhost`, proyecto Compose y volúmenes propios. La guía detallada está en [apps_ind/metalmecanica/README.md](apps_ind/metalmecanica/README.md).
 
 ## Documentación
 
@@ -44,29 +44,100 @@ La construcción está bloqueada para desarrollo local; la lista de pendientes d
 
 ## Estructura completa del proyecto
 
+El siguiente árbol enumera todos los archivos propios versionados. Los tres directorios de `vendor/` son gitlinks: sus miles de archivos pertenecen a repositorios upstream y se detallan por separado en `vendor/README.md`.
+
 ```text
 metalmechanics_custom_erp/
-├── apps/                         # Aplicaciones propias del ERP
-│   └── metalmecanica/            # App Frappe de negocio y pruebas
-├── deployment/                   # Imagen, Compose, locks y operaciones locales
-│   ├── config/                   # Overrides y variables de entorno de ejemplo
-│   ├── lock-inputs/              # Entradas declarativas de resolución
-│   ├── locks/                    # Dependencias e imágenes fijadas
-│   └── scripts/                  # Bootstrap, backup, restore y health checks
-├── docs/                         # Arquitectura, negocio, ADR y validaciones
-│   ├── adr/
-│   ├── architecture/
-│   └── business/
-├── tests/                        # Pruebas HTTP, scheduler y recuperación
-├── vendor/                       # Submódulos upstream fijados por commit
-│   ├── frappe/
-│   ├── erpnext/
-│   └── frappe_docker/
-├── .dockerignore                 # Exclusiones de la construcción
-├── .gitattributes                # Normalización de texto
-├── .gitignore                    # Secretos, reportes y datos locales
-├── .gitmodules                   # Definición de submódulos Git
-└── README.md                     # Mapa y guía del repositorio
+├── .dockerignore
+├── .gitattributes
+├── .gitignore
+├── .gitmodules
+├── DEVOPS.md
+├── README.md
+├── .github/
+│   └── workflows/
+│       ├── dev.yml
+│       └── main.yml
+├── apps/
+│   └── metalmecanica/
+│       ├── DEVOPS.md
+│       ├── README.md
+│       ├── pyproject.toml
+│       └── metalmecanica/
+│           ├── __init__.py
+│           ├── api.py
+│           ├── hooks.py
+│           ├── modules.txt
+│           ├── patches.txt
+│           ├── .frappe
+│           ├── config/__init__.py
+│           ├── metalmecanica/__init__.py
+│           ├── patches/__init__.py
+│           ├── public/.gitkeep
+│           ├── public/css/.gitkeep
+│           ├── public/js/.gitkeep
+│           ├── templates/__init__.py
+│           ├── templates/includes/.gitkeep
+│           ├── templates/pages/__init__.py
+│           ├── tests/__init__.py
+│           ├── tests/test_api.py
+│           └── www/.gitkeep
+├── deployment/
+│   ├── DEVOPS.md
+│   ├── README.md
+│   ├── Dockerfile
+│   ├── docker-compose.yml
+│   ├── erp.ps1
+│   ├── config/compose.dev.yml
+│   ├── config/env.example
+│   ├── lock-inputs/runtime.in
+│   ├── lock-inputs/tools.in
+│   ├── locks/images.json
+│   ├── locks/runtime.txt
+│   ├── locks/tools.txt
+│   └── scripts/
+│       ├── health.py
+│       └── manage.py
+├── docs/
+│   ├── DEVOPS.md
+│   ├── README.md
+│   ├── adr/0001-modular-monolith.md
+│   ├── adr/0002-source-provenance.md
+│   ├── adr/0003-version-selection.md
+│   ├── adr/0004-local-build-and-development.md
+│   ├── architecture/dependencies.md
+│   ├── architecture/development.md
+│   ├── architecture/docker-services.md
+│   ├── architecture/environment-lock.json
+│   ├── architecture/phase-0-validation.md
+│   ├── architecture/phase-1-plan.md
+│   ├── architecture/phase-1-validation.md
+│   ├── architecture/security-and-qa.md
+│   ├── architecture/security-findings.md
+│   ├── architecture/sources.lock.json
+│   ├── architecture/system-overview.md
+│   ├── business/domain-model.md
+│   └── business/mvp-scope.md
+├── tests/
+│   ├── DEVOPS.md
+│   ├── README.md
+│   ├── phase1_http.py
+│   ├── phase1_recovery.py
+│   └── phase1_scheduler.py
+└── vendor/
+    ├── README.md
+    ├── DEVOPS.md
+    ├── frappe/              # gitlink al commit fijado
+    ├── erpnext/             # gitlink al commit fijado
+    └── frappe_docker/       # gitlink al commit fijado
 ```
 
+Los directorios locales ignorados `deployment/.secrets/`, `deployment/backups/`, `deployment/reports/` y el archivo `deployment/.env` pueden aparecer durante la ejecución, pero no forman parte del repositorio versionado.
+
 Cada área tiene su propio mapa detallado: [apps/metalmecanica/README.md](apps/metalmecanica/README.md), [deployment/README.md](deployment/README.md), [docs/README.md](docs/README.md), [tests/README.md](tests/README.md) y [vendor/README.md](vendor/README.md).
+
+
+## Vía experimental independiente
+
+El árbol pps_ind/ contiene las implementaciones que se compararán con Frappe/ERPNext. deployment/Dockerfile.independent parte de la imagen estable y agrega únicamente la app experimental; deployment/config/compose.independent.yml y deployment/erp-independent.ps1 la levantan en el proyecto metalmecanica-independent-compare, con puerto 8081 y volúmenes separados. No se eliminan ni comparten datos con el proyecto estable.
+

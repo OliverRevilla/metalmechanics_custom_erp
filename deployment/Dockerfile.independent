@@ -1,0 +1,12 @@
+# Experimental image: it does not read vendor/ directly.
+# The baseline image supplies the pinned Frappe/ERPNext runtime while this
+# image adds only the independent application under apps_ind/.
+ARG BASE_IMAGE=metalmecanica-erp:dev
+FROM ${BASE_IMAGE}
+
+USER root
+COPY apps_ind/metalmecanica/ /home/frappe/frappe-bench/apps/metalmecanica_ind/
+RUN chown -R frappe:0 /home/frappe/frappe-bench/apps/metalmecanica_ind \
+ && su -s /bin/bash frappe -c 'uv pip install --python /home/frappe/frappe-bench/env/bin/python --no-deps --no-build-isolation -e /home/frappe/frappe-bench/apps/metalmecanica_ind' \
+ && printf 'frappe\nerpnext\nmetalmecanica\nmetalmecanica_ind\n' > /home/frappe/frappe-bench/sites/apps.txt
+USER frappe

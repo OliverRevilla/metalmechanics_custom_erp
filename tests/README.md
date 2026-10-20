@@ -2,6 +2,8 @@
 
 ```text
 tests/
+├── DEVOPS.md                      # Procedimiento de cambios de pruebas
+├── README.md                      # Este mapa
 ├── phase1_http.py                 # Login, permisos, CSRF, assets y Engine.IO
 ├── phase1_recovery.py              # Fixtures público/privado y password cifrada
 └── phase1_scheduler.py             # Dos ciclos reales del scheduler y logs

@@ -4,26 +4,34 @@ Aplicación propia de Frappe. Aquí vivirá la lógica y los DocTypes específic
 
 ```text
 apps/metalmecanica/
+├── DEVOPS.md                     # Procedimiento de cambios de la app
+├── README.md                     # Este mapa
 ├── pyproject.toml                # Metadatos y dependencias de la app
 └── metalmecanica/
     ├── __init__.py               # Versión de la app
-    ├── api.py                    # Métodos HTTP propios, actualmente build info
+    ├── api.py                    # Métodos HTTP propios
     ├── hooks.py                  # Integración con el ciclo de Frappe
     ├── modules.txt               # Módulos Frappe instalables
     ├── patches.txt               # Patches versionados de la app
+    ├── .frappe                   # Marcador de app Frappe
     ├── config/
-    │   └── __init__.py           # Configuración de escritorio y módulos
+    │   └── __init__.py
     ├── metalmecanica/
     │   └── __init__.py           # Paquete del módulo funcional inicial
     ├── patches/
-    │   └── __init__.py           # Namespace de patches
+    │   └── __init__.py
+    ├── public/
+    │   ├── .gitkeep
+    │   ├── css/.gitkeep
+    │   └── js/.gitkeep
     ├── templates/
     │   ├── __init__.py
-    │   └── pages/
-    │       └── __init__.py       # Páginas web propias futuras
-    └── tests/
-        ├── __init__.py
-        └── test_api.py           # Pruebas autenticadas y de permisos
+    │   ├── includes/.gitkeep
+    │   └── pages/__init__.py
+    ├── tests/
+    │   ├── __init__.py
+    │   └── test_api.py
+    └── www/.gitkeep
 ```
 
 El marcador de desarrollo actual es `metalmecanica-dev-001`. Los nuevos DocTypes deben organizarse dentro de `metalmecanica/` en la estructura estándar de Frappe y acompañarse de pruebas en `tests/`.

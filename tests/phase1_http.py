@@ -15,7 +15,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode, urljoin, urlsplit
 from urllib.request import HTTPCookieProcessor, Request, build_opener
 
-BUILD = "/api/method/metalmecanica.api.get_build_info"
+DEFAULT_BUILD = "/api/method/metalmecanica.api.get_build_info"
 IDENTITY = "/api/method/frappe.auth.get_logged_user"
 MAX_BODY = 8 * 1024 * 1024
 
@@ -104,6 +104,8 @@ def main():
     parser.add_argument("--site", required=True)
     parser.add_argument("--password-file", type=Path, default=Path("deployment/.secrets/admin_password"))
     parser.add_argument("--expected-marker", default="metalmecanica-dev-001")
+    parser.add_argument("--build-info-path", default=DEFAULT_BUILD)
+    parser.add_argument("--expected-app", default="metalmecanica")
     args = parser.parse_args()
     parts = urlsplit(args.base_url)
     if parts.scheme not in ("http", "https") or not parts.netloc or parts.username or parts.password or parts.query or parts.fragment or parts.path not in ("", "/"):
@@ -119,7 +121,7 @@ def main():
     suite.run("ping", ping)
 
     def denied_build():
-        r = guest.call(BUILD)
+        r = guest.call(args.build_info_path)
         suite.expect("guest_build_denied", r, r.status in (401, 403), "unauthenticated_build_access_denied")
     suite.run("guest_build_denied", denied_build)
 
@@ -159,9 +161,9 @@ def main():
         suite.run("authenticated_identity", identity)
 
         def build():
-            r = auth.call(BUILD)
+            r = auth.call(args.build_info_path)
             info = r.json().get("message", {})
-            valid = isinstance(info, dict) and info.get("app") == "metalmecanica" and info.get("site") == args.site and info.get("development_marker") == args.expected_marker
+            valid = isinstance(info, dict) and info.get("app") == args.expected_app and info.get("site") == args.site and info.get("development_marker") == args.expected_marker
             suite.expect("authenticated_build_marker", r, r.status == 200 and valid, "mounted_app_marker_and_site_match")
         suite.run("authenticated_build_marker", build)
 

@@ -1,0 +1,56 @@
+# Merge after deployment/docker-compose.yml for the isolated candidate.
+x-independent-app: &independent-app
+  image: ${INDEPENDENT_IMAGE:-metalmecanica-erp:independent}
+  pull_policy: never
+  environment:
+    SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
+    REQUIRED_APPS: erpnext,metalmecanica_ind
+    TZ: America/Lima
+    PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+
+services:
+  configurator:
+    <<: *independent-app
+  backend:
+    <<: *independent-app
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile.independent
+  frontend:
+    <<: *independent-app
+    environment:
+      SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
+      REQUIRED_APPS: erpnext,metalmecanica_ind
+      TZ: America/Lima
+      PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
+      NGINX_LISTEN_PORT: "8080"
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    ports: !override
+      - "127.0.0.1:8081:8080"
+  websocket:
+    <<: *independent-app
+  queue-short:
+    <<: *independent-app
+  queue-long:
+    <<: *independent-app
+  scheduler:
+    <<: *independent-app
+  bootstrap:
+    <<: *independent-app
+  backup:
+    <<: *independent-app
+  restore:
+    <<: *independent-app
+  tools:
+    <<: *independent-app
+
+
+
+

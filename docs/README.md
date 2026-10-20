@@ -2,6 +2,8 @@
 
 ```text
 docs/
+├── DEVOPS.md                      # Procedimiento de cambios documentales
+├── README.md                      # Este mapa
 ├── adr/                           # Decisiones de arquitectura numeradas
 │   ├── 0001-modular-monolith.md
 │   ├── 0002-source-provenance.md
