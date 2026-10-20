@@ -1,0 +1,4 @@
+[pre_model_sync]
+# No application migrations in the foundation phase.
+
+[post_model_sync]

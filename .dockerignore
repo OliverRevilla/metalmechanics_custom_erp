@@ -1,0 +1,13 @@
+.git
+**/.git
+**/__pycache__
+**/*.pyc
+**/.venv
+**/node_modules
+deployment/.secrets
+deployment/.env
+deployment/backups
+deployment/reports
+docs
+!docs/architecture
+!docs/architecture/sources.lock.json

@@ -1,0 +1,31 @@
+# Merge AFTER deployment/docker-compose.yml. Sources resolve relative to that file.
+# Rebuild assets after JS/CSS changes; Python changes require restarting relevant services.
+x-dev-app: &dev-app
+  type: bind
+  source: ../apps/metalmecanica
+  target: /home/frappe/frappe-bench/apps/metalmecanica
+  bind:
+    create_host_path: false
+services:
+  configurator:
+    volumes: [*dev-app]
+  backend:
+    volumes: [*dev-app]
+  frontend:
+    volumes: [*dev-app]
+  websocket:
+    volumes: [*dev-app]
+  queue-short:
+    volumes: [*dev-app]
+  queue-long:
+    volumes: [*dev-app]
+  scheduler:
+    volumes: [*dev-app]
+  bootstrap:
+    volumes: [*dev-app]
+  backup:
+    volumes: [*dev-app]
+  restore:
+    volumes: [*dev-app]
+  tools:
+    volumes: [*dev-app]

@@ -1,0 +1,10 @@
+flit_core==3.12.0
+setuptools==84.2.0
+wheel==0.48.0
+pip==26.2.1
+coverage~=7.10.0
+Faker~=18.10.1
+hypothesis~=6.77.0
+freezegun~=1.5.1
+responses==0.23.1
+unittest-xml-reporting~=3.2.0

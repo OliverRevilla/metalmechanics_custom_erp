@@ -1,0 +1,9 @@
+[submodule "vendor/frappe"]
+	path = vendor/frappe
+	url = https://github.com/frappe/frappe.git
+[submodule "vendor/erpnext"]
+	path = vendor/erpnext
+	url = https://github.com/frappe/erpnext.git
+[submodule "vendor/frappe_docker"]
+	path = vendor/frappe_docker
+	url = https://github.com/frappe/frappe_docker.git

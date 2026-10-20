@@ -1,0 +1,207 @@
+# Based on vendor/frappe_docker at df2a3b72910634cf0e878b59eccf68a93736bf9d.
+name: metalmecanica-dev
+
+x-app: &app
+  image: ${CUSTOM_IMAGE:-metalmecanica-erp:dev}
+  pull_policy: never
+  restart: unless-stopped
+  working_dir: /home/frappe/frappe-bench
+  environment: &app-env
+    SITE_NAME: ${SITE_NAME:-metalmecanica.localhost}
+    REQUIRED_APPS: erpnext,metalmecanica
+    TZ: America/Lima
+    PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+  depends_on: &configured
+    configurator:
+      condition: service_completed_successfully
+
+x-tool: &tool
+  <<: *app
+  profiles: [tools]
+  restart: "no"
+  secrets:
+    - db_root_password
+    - admin_password
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+    - type: bind
+      source: ./backups
+      target: /backups
+      bind:
+        create_host_path: false
+
+services:
+  db:
+    image: ${MARIADB_IMAGE:?Set MARIADB_IMAGE to the verified digest in deployment/.env}
+    restart: unless-stopped
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_ROOT_HOST: "%"
+      TZ: America/Lima
+    secrets: [db_root_password]
+    volumes:
+      - db-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis-cache:
+    image: ${REDIS_IMAGE:?Set REDIS_IMAGE to the verified digest in deployment/.env}
+    restart: unless-stopped
+    command: [redis-server, --save, "", --appendonly, "no"]
+    tmpfs:
+      - /data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis-queue:
+    image: ${REDIS_IMAGE:?Set REDIS_IMAGE to the verified digest in deployment/.env}
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - redis-queue-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  configurator:
+    <<: *app
+    restart: "no"
+    command: [env/bin/python, /opt/metalmecanica/scripts/manage.py, configure]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+      redis-queue:
+        condition: service_healthy
+
+  backend:
+    <<: *app
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    command: [start.sh]
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, tcp, "127.0.0.1", "8000"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  frontend:
+    <<: *app
+    command: [nginx-entrypoint.sh]
+    environment:
+      <<: *app-env
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME:-metalmecanica.localhost}
+      NGINX_LISTEN_PORT: "8080"
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    ports:
+      - "127.0.0.1:8080:8080"
+    depends_on:
+      <<: *configured
+      backend:
+        condition: service_started
+      websocket:
+        condition: service_started
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, http]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  websocket:
+    <<: *app
+    command: [node, /home/frappe/frappe-bench/apps/frappe/socketio.js]
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, tcp, "127.0.0.1", "9000"]
+      start_period: 30s
+      interval: 15s
+      timeout: 5s
+      retries: 12
+
+  queue-short:
+    <<: *app
+    command: [bench, worker, --queue, "short,default"]
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, worker, short]
+      start_period: 60s
+      interval: 30s
+      timeout: 10s
+      retries: 6
+
+  queue-long:
+    <<: *app
+    command: [bench, worker, --queue, "long,default,short"]
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, worker, long]
+      start_period: 60s
+      interval: 30s
+      timeout: 10s
+      retries: 6
+
+  scheduler:
+    <<: *app
+    command: [bench, schedule]
+    healthcheck:
+      test: [CMD, env/bin/python, /opt/metalmecanica/scripts/health.py, scheduler]
+      start_period: 30s
+      interval: 30s
+      timeout: 10s
+      retries: 6
+
+  bootstrap:
+    <<: *tool
+    command: [env/bin/python, /opt/metalmecanica/scripts/manage.py, bootstrap]
+
+  backup:
+    <<: *tool
+    command: [env/bin/python, /opt/metalmecanica/scripts/manage.py, backup]
+
+  restore:
+    <<: *tool
+    environment:
+      <<: *app-env
+      BACKUP_BUNDLE: ${BACKUP_BUNDLE:-}
+      RESTORE_SITE_NAME: ${RESTORE_SITE_NAME:-}
+    command: [env/bin/python, /opt/metalmecanica/scripts/manage.py, restore]
+
+  tools:
+    <<: *tool
+    command: [env/bin/python, /opt/metalmecanica/scripts/manage.py, check]
+
+secrets:
+  db_root_password:
+    file: ./.secrets/db_root_password
+  admin_password:
+    file: ./.secrets/admin_password
+
+volumes:
+  sites:
+  logs:
+  db-data:
+  redis-queue-data:

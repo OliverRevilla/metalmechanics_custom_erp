@@ -1,0 +1,15 @@
+{
+  "platform": "linux/amd64",
+  "debian_snapshot": "20261019T000000Z",
+  "images": {
+    "python": "python:3.14.8-slim-trixie@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9",
+    "node": "node:24-trixie-slim@sha256:27526714fd6b7dc938f8cb1665bf1fe749efadadf0145d5bcc07f0fbd0370b60",
+    "mariadb": "mariadb:11.8.9@sha256:d689f65e09e887e96db5c40ca3957dd9f4e3fad3516baec96d7726c78a5fc2ee",
+    "redis": "redis:8.6.7-alpine@sha256:019e4fb3c6de024c8f70ab5219d4abded5f335de770876981c7b0a051c43df87"
+  },
+  "tools": {
+    "bench": "5.31.0",
+    "uv": "0.11.33",
+    "yarn": "1.22.22"
+  }
+}

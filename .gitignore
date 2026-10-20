@@ -218,3 +218,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Metalmecanica local runtime
+/deployment/.secrets/
+/deployment/backups/
+/deployment/reports/
+/deployment/.env

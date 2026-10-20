@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "reviewed_on": "2026-10-20",
+  "timezone": "America/Lima",
+  "lock_scope": "upstream source commits; environment locks under deployment/locks",
+  "sources": [
+    {
+      "name": "frappe",
+      "path": "vendor/frappe",
+      "url": "https://github.com/frappe/frappe.git",
+      "tag": "v16.52.0",
+      "commit": "4515014c87ece6cb20ee91d2cfb121c5cbd1ff4a",
+      "license_file": "vendor/frappe/LICENSE",
+      "license_identified": "MIT"
+    },
+    {
+      "name": "erpnext",
+      "path": "vendor/erpnext",
+      "url": "https://github.com/frappe/erpnext.git",
+      "tag": "v16.51.1",
+      "commit": "5af6561f5aa48104559692fb4fd82f2580e8d338",
+      "license_file": "vendor/erpnext/license.txt",
+      "license_identified": "GNU GPL v3 (see upstream terms)"
+    },
+    {
+      "name": "frappe_docker",
+      "path": "vendor/frappe_docker",
+      "url": "https://github.com/frappe/frappe_docker.git",
+      "tag": null,
+      "commit": "df2a3b72910634cf0e878b59eccf68a93736bf9d",
+      "license_file": "vendor/frappe_docker/LICENSE",
+      "license_identified": "MIT"
+    }
+  ],
+  "declared_compatibility": {
+    "erpnext_requires_frappe": ">=16.50.0,<17.0.0",
+    "frappe_requires_python": ">=3.14,<3.15",
+    "erpnext_requires_python": ">=3.14",
+    "frappe_requires_node": ">=24",
+    "static_check": "satisfied",
+    "runtime_check": "See docs/architecture/phase-1-validation.md for execution results"
+  },
+  "proposed_runtime_lines": {
+    "python": "3.14",
+    "node": "24",
+    "mariadb": "11.8",
+    "redis": "8.6-alpine",
+    "debian": "trixie"
+  },
+  "unresolved": [
+    "Runtime distribution artifact hashes (runtime versions and VCS commits are fixed)",
+    "Upstream security advisories documented in docs/architecture/security-findings.md",
+    "Full OS, JavaScript and VCS vulnerability assessment",
+    "Production configuration and recovery objectives"
+  ],
+  "environment_lock_reference": "docs/architecture/environment-lock.json"
+}
