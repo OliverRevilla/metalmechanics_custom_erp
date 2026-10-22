@@ -1,14 +1,36 @@
 # Merge after deployment/docker-compose.yml for the isolated candidate.
+name: metalmecanica-independent-compare
+
+x-independent-env: &independent-env
+  SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
+  REQUIRED_APPS: erpnext
+  TZ: America/Lima
+  PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+
 x-independent-app: &independent-app
   image: ${INDEPENDENT_IMAGE:-metalmecanica-erp:independent}
   pull_policy: never
-  environment:
-    SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
-    REQUIRED_APPS: erpnext,metalmecanica_ind
-    TZ: America/Lima
-    PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+  environment: *independent-env
 
 services:
+  ind-api:
+    <<: *independent-app
+    command: [env/bin/uvicorn, metalmecanica_ind.service.main:app, --host, 0.0.0.0, --port, "8001"]
+    secrets:
+      - db_root_password
+    environment:
+      <<: *independent-env
+      IND_DB_HOST: db
+      IND_DB_NAME: metalmecanica_ind
+      IND_DB_PASSWORD_FILE: /run/secrets/db_root_password
+      IND_ADMIN_USERNAME: ${INDEPENDENT_ADMIN_USERNAME:-admin}
+      IND_ADMIN_EMAIL: ${INDEPENDENT_ADMIN_EMAIL:-admin@example.invalid}
+      IND_ADMIN_PASSWORD: ${INDEPENDENT_ADMIN_PASSWORD:?Set INDEPENDENT_ADMIN_PASSWORD in deployment/.env}
+      IND_SEED_DUMMY_DATA: ${INDEPENDENT_SEED_DUMMY_DATA:-true}
+    depends_on:
+      db:
+        condition: service_healthy
+
   configurator:
     <<: *independent-app
   backend:
@@ -20,11 +42,12 @@ services:
     <<: *independent-app
     environment:
       SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
-      REQUIRED_APPS: erpnext,metalmecanica_ind
+      REQUIRED_APPS: erpnext
       TZ: America/Lima
       PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
       BACKEND: backend:8000
       SOCKETIO: websocket:9000
+      INDEPENDENT_API: ind-api:8001
       FRAPPE_SITE_NAME_HEADER: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
       NGINX_LISTEN_PORT: "8080"
       UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
@@ -32,6 +55,9 @@ services:
       UPSTREAM_REAL_IP_RECURSIVE: "off"
       PROXY_READ_TIMEOUT: "120"
       CLIENT_MAX_BODY_SIZE: 50m
+    depends_on:
+      ind-api:
+        condition: service_started
     ports: !override
       - "127.0.0.1:8081:8080"
   websocket:
@@ -50,6 +76,18 @@ services:
     <<: *independent-app
   tools:
     <<: *independent-app
+
+# Explicit names make the isolation survive Compose project-name precedence
+# and prevent this stack from ever resolving to the stable volumes.
+volumes:
+  sites:
+    name: metalmecanica-independent-sites
+  logs:
+    name: metalmecanica-independent-logs
+  db-data:
+    name: metalmecanica-independent-db-data
+  redis-queue-data:
+    name: metalmecanica-independent-redis-queue-data
 
 
 

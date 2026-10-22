@@ -6,7 +6,9 @@ FROM ${BASE_IMAGE}
 
 USER root
 COPY apps_ind/metalmecanica/ /home/frappe/frappe-bench/apps/metalmecanica_ind/
+COPY deployment/independent-requirements.txt /opt/metalmecanica/independent-requirements.txt
+COPY deployment/nginx.independent.conf.template /templates/nginx/frappe.conf.template
 RUN chown -R frappe:0 /home/frappe/frappe-bench/apps/metalmecanica_ind \
- && su -s /bin/bash frappe -c 'uv pip install --python /home/frappe/frappe-bench/env/bin/python --no-deps --no-build-isolation -e /home/frappe/frappe-bench/apps/metalmecanica_ind' \
- && printf 'frappe\nerpnext\nmetalmecanica\nmetalmecanica_ind\n' > /home/frappe/frappe-bench/sites/apps.txt
+ && su -s /bin/bash frappe -c 'uv pip install --python /home/frappe/frappe-bench/env/bin/python --no-deps --no-build-isolation -e /home/frappe/frappe-bench/apps/metalmecanica_ind && uv pip install --python /home/frappe/frappe-bench/env/bin/python -r /opt/metalmecanica/independent-requirements.txt' \
+ && printf 'frappe\nerpnext\n' > /home/frappe/frappe-bench/sites/apps.txt
 USER frappe

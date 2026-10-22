@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Metalmecánica</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3XKQ1E9V2jM4U0QJf6p4rM5Q8v6w=" crossorigin="">
+  <link rel="stylesheet" href="/ind/static/app.css">
+</head>
+<body>
+  <div id="toast" class="toast" role="status"></div>
+  <section id="auth-view" class="auth-layout">
+    <div class="auth-art">
+      <div class="brand-mark">M</div>
+      <p class="eyebrow">METALMECÁNICA</p>
+      <h1>JH Ingenieros & Consultores</h1>
+      <p class="muted">Un espacio propio para pensar, diseñar y desarrollar soluciones personalizadas.</p>
+      <div class="signal-list">● Enfoque　● Análisis　● Crecimiento</div>
+    </div>
+    <div class="auth-card">
+      <div class="auth-heading"><span class="status-dot"></span><span>Acceso independiente</span></div>
+      <div id="login-panel">
+        <h2>Iniciar sesión</h2>
+        <p class="muted">Accede con tu usuario y contraseña.</p>
+        <form id="login-form" class="form-stack">
+          <label>Usuario<input name="username" autocomplete="username" required></label>
+          <label>Contraseña<input name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">Entrar <span>→</span></button>
+        </form>
+        <p class="auth-switch">¿No tienes una cuenta? <button id="show-register" class="link-button" type="button">Crear cuenta</button></p>
+      </div>
+      <div id="register-panel" hidden>
+        <h2>Crear cuenta</h2>
+        <p class="muted">El administrador debe activar tu cuenta y asignarte un rol.</p>
+        <form id="register-form" class="form-stack">
+          <label>Usuario<input name="username" autocomplete="username" required minlength="3"></label>
+          <label>Correo<input name="email" type="email" autocomplete="email" required></label>
+          <label>Contraseña<input name="password" type="password" autocomplete="new-password" required minlength="12"></label>
+          <button class="primary" type="submit">Registrarme <span>→</span></button>
+        </form>
+        <p class="auth-switch">¿Ya tienes una cuenta? <button id="show-login" class="link-button" type="button">Volver al login</button></p>
+      </div>
+      <p id="auth-error" class="form-error" aria-live="polite"></p>
+    </div>
+  </section>
+  <section id="app-view" class="app-layout" hidden>
+    <aside class="sidebar">
+      <div class="sidebar-brand"><div class="brand-mark small">M</div><div><strong>Metalmecánica</strong><small>independent</small></div></div>
+      <nav id="module-nav" class="module-nav"></nav>
+      <div class="sidebar-footer"><span class="status-dot"></span><span>Servicio operativo</span></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div><p class="eyebrow">ESPACIO INDEPENDIENTE</p><h1 id="page-title">Resumen</h1></div><div class="user-menu"><span id="user-name"></span><button id="logout" class="ghost">Salir</button></div></header>
+      <div id="workspace-content"></div>
+    </main>
+  </section>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/ind/static/app.js"></script>
+</body>
+</html>

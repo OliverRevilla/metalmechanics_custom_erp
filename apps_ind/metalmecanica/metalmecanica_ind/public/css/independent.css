@@ -1,0 +1,9 @@
+:root {
+	--metalmecanica-independent-accent: #0f766e;
+}
+
+.metalmecanica-independent-banner {
+	border-left: 4px solid var(--metalmecanica-independent-accent);
+	padding: 0.75rem 1rem;
+	background: #f0fdfa;
+}
