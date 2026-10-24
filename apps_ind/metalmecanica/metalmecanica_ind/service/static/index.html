@@ -4,8 +4,25 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Metalmecánica</title>
+  <style>
+    .report-bar-row { display:grid; gap:.45rem; padding:.75rem 0; border-bottom:1px solid #edf1f2; }
+    .report-bar-row:last-child { border-bottom:0; }
+    .report-bar-row > div:first-child { display:flex; justify-content:space-between; align-items:baseline; gap:1rem; flex-wrap:wrap; }
+    .report-bar-row small { color:#64727d; font-size:.75rem; }
+    .report-bar-track { height:12px; border-radius:999px; background:#e7f1f0; overflow:hidden; }
+    .report-bar-track span { display:block; height:100%; border-radius:inherit; background:#0f766e; }
+    .report-bar-track.blue span { background:#3478b9; }
+    .report-bar-track.purple span { background:#8b6fc8; }
+    .report-bar-track.amber span { background:#f0a83b; }
+    .line-chart-wrap { width:100%; overflow-x:auto; }
+    .line-chart-wrap svg { display:block; width:100%; min-width:520px; height:auto; }
+    .chart-legend { display:flex; gap:1rem; margin-top:.6rem; color:#64727d; font-size:.78rem; }
+    .chart-legend span { display:flex; align-items:center; gap:.35rem; }
+    .legend-dot { width:10px; height:10px; display:inline-block; border-radius:50%; background:#3478b9; }
+    .legend-dot.forecast { background:#f0a83b; }
+  </style>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIINfQ3XKQ1E9V2jM4U0QJf6p4rM5Q8v6w=" crossorigin="">
-  <link rel="stylesheet" href="/ind/static/app.css">
+  <link rel="stylesheet" href="/ind/static/app.css?v=20261024-hr-reports-fix-1">
 </head>
 <body>
   <div id="toast" class="toast" role="status"></div>
@@ -55,6 +72,6 @@
     </main>
   </section>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="/ind/static/app.js"></script>
+  <script src="/ind/static/app.js?v=20261024-hr-reports-fix-1"></script>
 </body>
 </html>

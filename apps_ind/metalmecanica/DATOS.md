@@ -374,3 +374,44 @@ tareas con fechas planificadas y reales. El frontend dibuja el diagrama por proy
 las tareas documentales aparecen como tiempo muerto y las tareas completadas se
 colorean de forma distinta. La fecha final comprometida proviene de la Orden de
 Servicio y la fecha de término real solo se registra al cerrar el proyecto.
+
+## Compras
+
+### `buy_suppliers`
+
+| Campo | Tipo | Regla |
+|---|---|---|
+| `supplier_type` | VARCHAR(20) | persona natural o jurídica |
+| `name` | VARCHAR(180) | razón social o nombre |
+| `document_type`, `document_number` | VARCHAR | RUC, DNI u otro documento; el número es único |
+| `supply_type` | VARCHAR(20) | productos, servicios o ambos |
+| `email`, `phone`, `secondary_phone` | VARCHAR | datos de contacto |
+| `address`, `city` | VARCHAR | ubicación del proveedor |
+| `contact_name` | VARCHAR(160) | contacto comercial o técnico |
+| `observations` | TEXT | materiales, cobertura, condiciones y notas |
+| `relationship_started_on` | DATE | fecha de inicio de relación |
+| `last_contact_on` | DATE | última comunicación registrada |
+| `is_active` | BOOLEAN | permite conservar proveedores históricos sin mostrarlos como activos |
+
+`Compras → Proveedores` usa este directorio para registrar tanto proveedores de
+productos —por ejemplo acero— como prestadores de servicios —por ejemplo fletes o
+asistencia técnica de TI— sin mezclar proveedores con clientes.
+
+### `buy_items`, `buy_purchase_requests` y `buy_purchase_request_items`
+
+`buy_items` mantiene catálogos separados por `item_type` (`material` o `service`),
+con código, nombre, descripción y unidad base. `buy_purchase_requests` relaciona
+`buy_purchase_requests` relaciona cada solicitud con un proveedor y conserva
+código, descripción, fechas, estado y observaciones. Sus líneas viven en
+`buy_purchase_request_items`, que permite asociar uno o varios items a una misma
+solicitud, cada uno con cantidad, unidad y presentación. `item_id`, cantidad y
+unidad en la tabla principal se mantienen como compatibilidad con los registros
+anteriores; las nuevas operaciones usan siempre las líneas.
+
+### `buy_purchase_quotations`
+
+Cada cotización responde obligatoriamente a una solicitud mediante `request_id`.
+También registra proveedor, código de cotización, fecha, vigencia, estado, total y
+observaciones. La cinta de Materiales y Servicios concentra las vistas de Items,
+Solicitudes y Cotizaciones, eliminando las antiguas subsecciones separadas de
+cotizaciones.
