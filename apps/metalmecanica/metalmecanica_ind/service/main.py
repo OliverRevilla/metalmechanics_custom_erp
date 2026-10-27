@@ -211,6 +211,72 @@ def ensure_schema() -> None:
             )
             cursor.execute(
                 """
+                CREATE TABLE IF NOT EXISTS acc_cash_accounts (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    company_id BIGINT UNSIGNED NOT NULL,
+                    code VARCHAR(30) NOT NULL,
+                    name VARCHAR(160) NOT NULL,
+                    account_type VARCHAR(30) NOT NULL DEFAULT 'bank',
+                    bank_name VARCHAR(120) NULL,
+                    account_number_masked VARCHAR(40) NULL,
+                    opening_balance DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_acc_cash_company_code (company_id, code),
+                    CONSTRAINT fk_acc_cash_company FOREIGN KEY (company_id) REFERENCES acc_companies(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS acc_cash_movements (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    company_id BIGINT UNSIGNED NOT NULL,
+                    cash_account_id BIGINT UNSIGNED NOT NULL,
+                    movement_date DATE NOT NULL,
+                    direction VARCHAR(12) NOT NULL,
+                    category VARCHAR(50) NOT NULL,
+                    description VARCHAR(255) NOT NULL,
+                    reference VARCHAR(120) NULL,
+                    amount DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    source_type VARCHAR(40) NULL,
+                    source_id BIGINT UNSIGNED NULL,
+                    project_id BIGINT UNSIGNED NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_acc_cash_source (company_id, source_type, source_id),
+                    CONSTRAINT fk_acc_movement_company FOREIGN KEY (company_id) REFERENCES acc_companies(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_acc_movement_account FOREIGN KEY (cash_account_id) REFERENCES acc_cash_accounts(id) ON DELETE RESTRICT,
+                    CONSTRAINT fk_acc_movement_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS acc_banks (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(160) NOT NULL,
+                    country VARCHAR(80) NOT NULL DEFAULT 'Perú',
+                    website VARCHAR(255) NULL,
+                    api_provider VARCHAR(160) NULL,
+                    integration_status VARCHAR(30) NOT NULL DEFAULT 'research',
+                    notes TEXT NULL,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_acc_bank_name_country (name, country)
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute("SHOW COLUMNS FROM acc_cash_accounts LIKE 'bank_id'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE acc_cash_accounts ADD COLUMN bank_id BIGINT UNSIGNED NULL AFTER company_id")
+            cursor.execute("SHOW CREATE TABLE acc_cash_accounts")
+            cash_account_table = cursor.fetchone()["Create Table"]
+            if "fk_acc_cash_bank" not in cash_account_table:
+                cursor.execute("ALTER TABLE acc_cash_accounts ADD CONSTRAINT fk_acc_cash_bank FOREIGN KEY (bank_id) REFERENCES acc_banks(id) ON DELETE SET NULL")
+            cursor.execute(
+                """
                 CREATE TABLE IF NOT EXISTS ind_files (
                     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
                     original_name VARCHAR(255) NOT NULL,
@@ -657,6 +723,243 @@ def ensure_schema() -> None:
                 ) ENGINE=InnoDB
                 """
             )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_work_orders (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    wo_code VARCHAR(60) NOT NULL UNIQUE,
+                    project_id BIGINT UNSIGNED NULL,
+                    service_order_id BIGINT UNSIGNED NULL,
+                    bom_line_id BIGINT UNSIGNED NULL,
+                    work_order_type VARCHAR(20) NOT NULL DEFAULT 'project',
+                    title VARCHAR(180) NOT NULL,
+                    description TEXT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    priority VARCHAR(20) NOT NULL DEFAULT 'normal',
+                    planned_start DATE NULL,
+                    planned_end DATE NULL,
+                    estimated_hours DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_prod_wo_project FOREIGN KEY (project_id) REFERENCES proj_projects(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_wo_order FOREIGN KEY (service_order_id) REFERENCES sell_service_orders(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_wo_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_work_order_documents (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    work_order_id BIGINT UNSIGNED NOT NULL,
+                    file_id BIGINT UNSIGNED NULL,
+                    document_name VARCHAR(180) NOT NULL,
+                    file_name VARCHAR(255) NOT NULL,
+                    file_type VARCHAR(20) NOT NULL DEFAULT 'PDF',
+                    version VARCHAR(40) NOT NULL,
+                    is_current BOOLEAN NOT NULL DEFAULT TRUE,
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_prod_doc_wo FOREIGN KEY (work_order_id) REFERENCES prod_work_orders(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_doc_file FOREIGN KEY (file_id) REFERENCES ind_files(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_doc_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_work_order_steps (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    work_order_id BIGINT UNSIGNED NOT NULL,
+                    sequence_no INT NOT NULL,
+                    process_code VARCHAR(30) NOT NULL,
+                    process_name VARCHAR(80) NOT NULL,
+                    station VARCHAR(100) NULL,
+                    estimated_hours DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY uq_prod_step_sequence (work_order_id, sequence_no),
+                    CONSTRAINT fk_prod_step_wo FOREIGN KEY (work_order_id) REFERENCES prod_work_orders(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_time_logs (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    work_order_id BIGINT UNSIGNED NOT NULL,
+                    step_id BIGINT UNSIGNED NOT NULL,
+                    operator_name VARCHAR(180) NOT NULL,
+                    station VARCHAR(100) NULL,
+                    started_at DATETIME NOT NULL,
+                    ended_at DATETIME NULL,
+                    hours DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_prod_time_wo FOREIGN KEY (work_order_id) REFERENCES prod_work_orders(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_time_step FOREIGN KEY (step_id) REFERENCES prod_work_order_steps(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_time_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS inv_materials (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    item_code VARCHAR(60) NOT NULL UNIQUE,
+                    name VARCHAR(180) NOT NULL,
+                    category VARCHAR(40) NOT NULL DEFAULT 'raw_material',
+                    unit VARCHAR(20) NOT NULL DEFAULT 'UND',
+                    minimum_stock DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    current_stock DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    in_transit_stock DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    average_unit_cost DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_inv_material_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS inv_stock_movements (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    material_id BIGINT UNSIGNED NOT NULL,
+                    movement_date DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    movement_type VARCHAR(20) NOT NULL,
+                    quantity DECIMAL(18,6) NOT NULL,
+                    reference VARCHAR(120) NULL,
+                    work_order_id BIGINT UNSIGNED NULL,
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_inv_move_material FOREIGN KEY (material_id) REFERENCES inv_materials(id) ON DELETE RESTRICT,
+                    CONSTRAINT fk_inv_move_wo FOREIGN KEY (work_order_id) REFERENCES prod_work_orders(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_inv_move_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS inv_remnants (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    remnant_code VARCHAR(60) NOT NULL UNIQUE,
+                    material_id BIGINT UNSIGNED NOT NULL,
+                    description VARCHAR(255) NOT NULL,
+                    dimensions VARCHAR(120) NULL,
+                    quantity DECIMAL(18,6) NOT NULL,
+                    unit VARCHAR(20) NOT NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'available',
+                    source_work_order_id BIGINT UNSIGNED NULL,
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_inv_remnant_material FOREIGN KEY (material_id) REFERENCES inv_materials(id) ON DELETE RESTRICT,
+                    CONSTRAINT fk_inv_remnant_wo FOREIGN KEY (source_work_order_id) REFERENCES prod_work_orders(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_inv_remnant_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_boms (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    project_id BIGINT UNSIGNED NOT NULL,
+                    bom_code VARCHAR(60) NOT NULL UNIQUE,
+                    version VARCHAR(40) NOT NULL DEFAULT 'Rev A',
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_prod_bom_project FOREIGN KEY (project_id) REFERENCES proj_projects(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_bom_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_bom_lines (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    bom_id BIGINT UNSIGNED NOT NULL,
+                    parent_line_id BIGINT UNSIGNED NULL,
+                    line_code VARCHAR(60) NULL,
+                    line_kind VARCHAR(20) NOT NULL DEFAULT 'element',
+                    cost_source VARCHAR(20) NOT NULL DEFAULT 'average',
+                    quotation_id BIGINT UNSIGNED NULL,
+                    line_type VARCHAR(20) NOT NULL,
+                    material_id BIGINT UNSIGNED NULL,
+                    description VARCHAR(180) NOT NULL,
+                    quantity DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    unit VARCHAR(20) NOT NULL DEFAULT 'UND',
+                    estimated_unit_cost DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    notes TEXT NULL,
+                    CONSTRAINT fk_prod_bom_line_bom FOREIGN KEY (bom_id) REFERENCES prod_boms(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_bom_line_material FOREIGN KEY (material_id) REFERENCES inv_materials(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_bom_line_quote FOREIGN KEY (quotation_id) REFERENCES buy_purchase_quotations(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_bom_line_parent FOREIGN KEY (parent_line_id) REFERENCES prod_bom_lines(id) ON DELETE CASCADE
+                ) ENGINE=InnoDB
+                """
+            )
+            cursor.execute("SHOW COLUMNS FROM prod_work_orders LIKE 'bom_line_id'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_work_orders ADD COLUMN bom_line_id BIGINT UNSIGNED NULL AFTER service_order_id")
+            cursor.execute("SHOW COLUMNS FROM prod_work_orders LIKE 'work_order_type'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_work_orders ADD COLUMN work_order_type VARCHAR(20) NOT NULL DEFAULT 'project' AFTER bom_line_id")
+            cursor.execute("SHOW COLUMNS FROM prod_bom_lines LIKE 'parent_line_id'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_bom_lines ADD COLUMN parent_line_id BIGINT UNSIGNED NULL AFTER bom_id")
+            cursor.execute("SHOW COLUMNS FROM prod_bom_lines LIKE 'line_code'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_bom_lines ADD COLUMN line_code VARCHAR(60) NULL AFTER parent_line_id")
+            cursor.execute("SHOW COLUMNS FROM prod_bom_lines LIKE 'line_kind'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_bom_lines ADD COLUMN line_kind VARCHAR(20) NOT NULL DEFAULT 'element' AFTER line_code")
+            cursor.execute("SHOW COLUMNS FROM prod_bom_lines LIKE 'cost_source'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_bom_lines ADD COLUMN cost_source VARCHAR(20) NOT NULL DEFAULT 'average' AFTER line_kind")
+            cursor.execute("SHOW COLUMNS FROM prod_bom_lines LIKE 'quotation_id'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE prod_bom_lines ADD COLUMN quotation_id BIGINT UNSIGNED NULL AFTER cost_source")
+            cursor.execute("SHOW COLUMNS FROM inv_materials LIKE 'average_unit_cost'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE inv_materials ADD COLUMN average_unit_cost DECIMAL(18,6) NOT NULL DEFAULT 0 AFTER current_stock")
+            cursor.execute("SHOW COLUMNS FROM inv_materials LIKE 'in_transit_stock'")
+            if not cursor.fetchone():
+                cursor.execute("ALTER TABLE inv_materials ADD COLUMN in_transit_stock DECIMAL(18,6) NOT NULL DEFAULT 0 AFTER current_stock")
+            cursor.execute("SHOW CREATE TABLE prod_bom_lines")
+            bom_line_table = cursor.fetchone()["Create Table"]
+            if "fk_prod_bom_line_parent" not in bom_line_table:
+                cursor.execute("ALTER TABLE prod_bom_lines ADD CONSTRAINT fk_prod_bom_line_parent FOREIGN KEY (parent_line_id) REFERENCES prod_bom_lines(id) ON DELETE CASCADE")
+            if "fk_prod_bom_line_quote" not in bom_line_table:
+                cursor.execute("ALTER TABLE prod_bom_lines ADD CONSTRAINT fk_prod_bom_line_quote FOREIGN KEY (quotation_id) REFERENCES buy_purchase_quotations(id) ON DELETE SET NULL")
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS prod_plans (
+                    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    project_id BIGINT UNSIGNED NOT NULL,
+                    plan_code VARCHAR(60) NOT NULL UNIQUE,
+                    name VARCHAR(180) NOT NULL,
+                    bom_id BIGINT UNSIGNED NULL,
+                    starts_on DATE NULL,
+                    ends_on DATE NULL,
+                    status VARCHAR(20) NOT NULL DEFAULT 'draft',
+                    planned_hours DECIMAL(18,6) NOT NULL DEFAULT 0,
+                    notes TEXT NULL,
+                    created_by BIGINT UNSIGNED NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT fk_prod_plan_project FOREIGN KEY (project_id) REFERENCES proj_projects(id) ON DELETE CASCADE,
+                    CONSTRAINT fk_prod_plan_bom FOREIGN KEY (bom_id) REFERENCES prod_boms(id) ON DELETE SET NULL,
+                    CONSTRAINT fk_prod_plan_user FOREIGN KEY (created_by) REFERENCES ind_users(id) ON DELETE RESTRICT
+                ) ENGINE=InnoDB
+                """
+            )
             if not ADMIN_PASSWORD:
                 raise RuntimeError("IND_ADMIN_PASSWORD must be configured for the independent service")
             cursor.execute("SELECT id FROM ind_users WHERE username = %s", (ADMIN_USERNAME,))
@@ -700,6 +1003,12 @@ def seed_dummy_data(cursor) -> None:
     customer_four = customer("20600000004", ("company", "Planta Industrial del Sur S.A.", "RUC", "20600000004", "ingenieria@planta-sur.test", "+51 999 320 420", "Av. Parra 615", "Arequipa", "Jorge Cárdenas", "Cliente recurrente de mantenimiento y estructuras."))
     customer_five = customer("20600000005", ("company", "Inversiones Costa Norte S.R.L.", "RUC", "20600000005", "compras@costa-norte.test", "+51 999 330 430", "Av. España 1040", "Trujillo", "Renzo Valdivia", "Cliente de infraestructura y obras civiles."))
     customer_six = customer("10400000006", ("person", "Elena Vargas", "DNI", "10400000006", "elena.vargas@test", "+51 999 340 440", "Calle Los Cedros 180", "Lima", "Elena Vargas", "Cliente persona natural para servicio de adecuación."))
+    customer_seven = customer("20600000007", ("company", "Energía Modular del Centro S.A.C.", "RUC", "20600000007", "proyectos@energia-modular.test", "+51 999 350 450", "Av. Circunvalación 430", "Huancayo", "Mónica Rojas", "Proyecto de estructura y montaje de módulos energéticos."))
+    customer_eight = customer("20600000008", ("company", "Alimentos Andinos del Norte S.A.", "RUC", "20600000008", "mantenimiento@alimentos-andinos.test", "+51 999 360 460", "Carretera Industrial 800", "Trujillo", "Víctor Ponce", "Mantenimiento y ampliación de planta de alimentos."))
+    customer_nine = customer("20600000009", ("company", "Minerales del Sur S.A.C.", "RUC", "20600000009", "ingenieria@minerales-sur.test", "+51 999 370 470", "Parque Industrial Río Seco 120", "Arequipa", "Gabriela Núñez", "Estructuras para faja transportadora y chancado."))
+    customer_ten = customer("20600000010", ("company", "Logística Portuaria del Callao S.A.", "RUC", "20600000010", "obras@logistica-portuaria.test", "+51 999 380 480", "Av. Néstor Gambetta 1700", "Callao", "Alonso Vera", "Adecuación de plataformas y protecciones portuarias."))
+    customer_eleven = customer("20600000014", ("company", "Manufacturas del Pacífico S.R.L.", "RUC", "20600000014", "planta@manufacturas-pacifico.test", "+51 999 390 490", "Av. Separadora Industrial 150", "Lima", "Cecilia Flores", "Parada de planta y mantenimiento de equipos."))
+    customer_twelve = customer("20600000015", ("company", "Infraestructura Sierra Azul S.A.C.", "RUC", "20600000015", "contratos@sierra-azul.test", "+51 999 400 500", "Av. Ejército 520", "Cusco", "Rodrigo Medina", "Proyecto futuro de ampliación de taller y almacén."))
 
     def supplier(document_number: str, values: tuple) -> None:
         cursor.execute("SELECT id FROM buy_suppliers WHERE document_number = %s", (document_number,))
@@ -797,6 +1106,12 @@ def seed_dummy_data(cursor) -> None:
         ("service", "SOL-SRV-005", "SRV-ERP-IMPL", "20600000107", "Configuración del módulo de compras.", "Implementación fase 1", "1", "SERV", "2026-09-18", "2026-10-15", "quoted"),
         ("service", "SOL-SRV-006", "SRV-IMP-CORP", "20600000108", "Material impreso para ventas y planta.", "Catálogos y señalética", "1", "SERV", "2026-10-01", "2026-10-18", "received"),
         ("service", "SOL-SRV-007", "SRV-MKT-B2B", "20600000109", "Campaña comercial para clientes industriales.", "Plan mensual de contenidos", "1", "MES", "2026-10-05", "2026-10-25", "draft"),
+        ("material", "SOL-MAT-009", "MAT-AC-A36", "20600000101", "Material para módulos energéticos Centro.", "Plancha A36 · 4 mm", "520", "KG", "2026-01-12", "2026-01-25", "completed"),
+        ("material", "SOL-MAT-010", "MAT-AC-A572", "20600000101", "Refuerzos para ampliación de línea de envasado.", "Plancha A572 · 6 mm", "780", "KG", "2026-02-20", "2026-03-10", "completed"),
+        ("material", "SOL-MAT-011", "MAT-AC-GALV", "20600000102", "Coberturas galvanizadas para faja transportadora.", "Plancha galvanizada · 1.5 mm", "460", "KG", "2026-04-10", "2026-04-28", "received"),
+        ("material", "SOL-MAT-012", "MAT-AC-304", "20600000102", "Componentes inoxidables para plataformas portuarias.", "Plancha AISI 304 · 3 mm", "330", "KG", "2026-07-20", "2026-08-08", "ordered"),
+        ("material", "SOL-MAT-013", "MAT-PINT-EPOX", "20600000103", "Recubrimiento para parada mayor de planta.", "Kit epóxico · 5 galones", "35", "GLN", "2026-10-20", "2026-11-05", "requested"),
+        ("service", "SOL-SRV-008", "SRV-FLETE-INTER", "20600000104", "Transporte de materiales para Taller Sierra Azul.", "Camión plataforma · Lima–Cusco", "4", "SERV", "2026-11-15", "2026-12-05", "quoted"),
     ]
     request_ids = {}
     for kind, code, item_code, supplier_number, description, presentation, quantity, unit, requested_on, required_by, state in extra_requests:
@@ -815,6 +1130,12 @@ def seed_dummy_data(cursor) -> None:
         ("COT-COMP-010", "SOL-SRV-005", "20600000107", "2026-09-20", "2026-10-05", "received", "18500.00"),
         ("COT-COMP-011", "SOL-SRV-006", "20600000108", "2026-10-03", "2026-10-12", "selected", "3180.00"),
         ("COT-COMP-012", "SOL-SRV-007", "20600000109", "2026-10-07", "2026-10-20", "received", "4500.00"),
+        ("COT-COMP-013", "SOL-MAT-009", "20600000101", "2026-01-14", "2026-01-24", "selected", "5096.00"),
+        ("COT-COMP-014", "SOL-MAT-010", "20600000101", "2026-02-22", "2026-03-05", "selected", "8268.00"),
+        ("COT-COMP-015", "SOL-MAT-011", "20600000102", "2026-04-12", "2026-04-25", "selected", "7130.00"),
+        ("COT-COMP-016", "SOL-MAT-012", "20600000102", "2026-07-22", "2026-08-05", "selected", "11220.00"),
+        ("COT-COMP-017", "SOL-MAT-013", "20600000103", "2026-10-22", "2026-11-01", "received", "5460.00"),
+        ("COT-COMP-018", "SOL-SRV-008", "20600000104", "2026-11-17", "2026-11-28", "selected", "9800.00"),
     ]
     quote_ids = {}
     for quote_code, request_code, supplier_number, quoted_on, valid_until, state, total in extra_quotes:
@@ -836,6 +1157,12 @@ def seed_dummy_data(cursor) -> None:
         ("OC-COMP-007", "SOL-SRV-004", "2026-09-13", "2026-10-13", "received", "7600.00"),
         ("OC-COMP-008", "SOL-SRV-005", "2026-09-21", "2026-10-21", "issued", "18500.00"),
         ("OC-COMP-009", "SOL-SRV-006", "2026-10-04", "2026-10-19", "received", "3180.00"),
+        ("OC-COMP-010", "SOL-MAT-009", "2026-01-15", "2026-01-27", "received", "5096.00"),
+        ("OC-COMP-011", "SOL-MAT-010", "2026-02-23", "2026-03-12", "received", "8268.00"),
+        ("OC-COMP-012", "SOL-MAT-011", "2026-04-13", "2026-04-30", "received", "7130.00"),
+        ("OC-COMP-013", "SOL-MAT-012", "2026-07-23", "2026-08-12", "confirmed", "11220.00"),
+        ("OC-COMP-014", "SOL-MAT-013", "2026-10-23", "2026-11-08", "issued", "5460.00"),
+        ("OC-COMP-015", "SOL-SRV-008", "2026-11-18", "2026-12-08", "issued", "9800.00"),
     ]
     order_ids = {}
     for order_code, request_code, ordered_on, expected_on, state, total in extra_orders:
@@ -856,6 +1183,12 @@ def seed_dummy_data(cursor) -> None:
         ("F001-00010006", "OC-COMP-006", "2026-10-05", "2026-11-04", "received", "PEN", "4200.00"),
         ("F001-00010007", "OC-COMP-007", "2026-10-14", "2026-11-13", "validated", "PEN", "7600.00"),
         ("F001-00010008", "OC-COMP-009", "2026-10-20", "2026-11-19", "received", "PEN", "3180.00"),
+        ("F001-00010009", "OC-COMP-010", "2026-01-28", "2026-02-27", "paid", "PEN", "5096.00"),
+        ("F001-00010010", "OC-COMP-011", "2026-03-13", "2026-04-12", "paid", "PEN", "8268.00"),
+        ("F001-00010011", "OC-COMP-012", "2026-05-01", "2026-05-31", "paid", "PEN", "7130.00"),
+        ("F001-00010012", "OC-COMP-013", "2026-08-13", "2026-09-12", "validated", "PEN", "11220.00"),
+        ("F001-00010013", "OC-COMP-014", "2026-11-09", "2026-12-09", "received", "PEN", "5460.00"),
+        ("F001-00010014", "OC-COMP-015", "2026-12-09", "2027-01-08", "received", "PEN", "9800.00"),
     ]
     for invoice_code, order_code, invoice_date, due_date, state, currency, subtotal in extra_invoices:
         cursor.execute("SELECT id FROM buy_purchase_invoices WHERE invoice_code = %s", (invoice_code,))
@@ -882,6 +1215,12 @@ def seed_dummy_data(cursor) -> None:
     order_three = service_order("OS-DUMMY-003", customer_three, ("Ampliación de nave industrial", "Estructura metálica", "Orden convertida desde la cotización COT-DUMMY-003.", "Patricia Salas", "patricia.salas@horizonte.test", "+51 999 311 411", "2026-08-20", "2026-11-30", "in_progress"))
     order_four = service_order("OS-DUMMY-004", customer_four, ("Mantenimiento preventivo de planta", "Mantenimiento industrial", "Servicio recurrente con visita de supervisión.", "Jorge Cárdenas", "jorge.cardenas@planta-sur.test", "+51 999 321 421", "2026-09-10", "2026-10-30", "approved"))
     order_five = service_order("OS-DUMMY-005", customer_five, ("Fabricación de plataformas de acceso", "Fabricación especial", "Orden originada por una propuesta de infraestructura.", "Renzo Valdivia", "renzo.valdivia@costa-norte.test", "+51 999 331 431", "2026-10-02", "2027-01-15", "approved"))
+    order_six = service_order("OS-DUMMY-006", customer_seven, ("Módulos energéticos y estructura de soporte", "Estructura metálica", "Fabricación, galvanizado y montaje de módulos energéticos.", "Mónica Rojas", "proyectos@energia-modular.test", "+51 999 350 450", "2026-01-10", "2026-03-30", "completed"))
+    order_seven = service_order("OS-DUMMY-007", customer_eight, ("Ampliación de línea de envasado", "Ampliación industrial", "Estructura, pasarelas y mantenimiento de línea de producción.", "Víctor Ponce", "mantenimiento@alimentos-andinos.test", "+51 999 360 460", "2026-02-15", "2026-06-15", "completed"))
+    order_eight = service_order("OS-DUMMY-008", customer_nine, ("Faja transportadora y tolvas", "Minería y montaje", "Ingeniería, fabricación y montaje de componentes para planta minera.", "Gabriela Núñez", "ingenieria@minerales-sur.test", "+51 999 370 470", "2026-04-01", "2026-08-20", "completed"))
+    order_nine = service_order("OS-DUMMY-009", customer_ten, ("Plataformas portuarias de mantenimiento", "Infraestructura portuaria", "Diseño y fabricación de plataformas, barandas y protecciones.", "Alonso Vera", "obras@logistica-portuaria.test", "+51 999 380 480", "2026-07-15", "2026-11-15", "in_progress"))
+    order_ten = service_order("OS-DUMMY-010", customer_eleven, ("Parada mayor de planta", "Mantenimiento industrial", "Parada programada con intervención de equipos y estructuras.", "Cecilia Flores", "planta@manufacturas-pacifico.test", "+51 999 390 490", "2026-10-15", "2026-12-20", "in_progress"))
+    order_eleven = service_order("OS-DUMMY-011", customer_twelve, ("Ampliación de taller Sierra Azul", "Infraestructura industrial", "Proyecto planificado de taller, almacén y cobertura metálica.", "Rodrigo Medina", "contratos@sierra-azul.test", "+51 999 400 500", "2026-12-01", "2027-04-20", "approved"))
     cursor.execute("UPDATE proj_projects p JOIN sell_service_orders o ON o.id = p.service_order_id SET p.planned_end_date = o.project_due_date WHERE p.planned_end_date IS NULL")
 
     def quotation(code: str, customer_id: int, order_id: int, items: list[tuple]) -> None:
@@ -902,6 +1241,12 @@ def seed_dummy_data(cursor) -> None:
     quotation("COT-DUMMY-005", customer_five, order_five, [("Plataformas metálicas", "UND", 4, 6800), ("Instalación", "SERV", 1, 5200)])
     quotation("COT-DUMMY-006", customer_three, None, [("Diseño de mezzanine", "SERV", 1, 9400), ("Memoria de cálculo", "SERV", 1, 3800)])
     quotation("COT-DUMMY-007", customer_six, None, [("Adecuación de taller", "SERV", 1, 7200)])
+    quotation("COT-DUMMY-008", customer_seven, order_six, [("Estructura para módulos", "KG", 2100, 9.8), ("Montaje y puesta en servicio", "SERV", 1, 16400)])
+    quotation("COT-DUMMY-009", customer_eight, order_seven, [("Pasarelas y plataformas", "KG", 3200, 8.9), ("Mantenimiento de línea", "SERV", 1, 22800)])
+    quotation("COT-DUMMY-010", customer_nine, order_eight, [("Tolvas y soportes", "UND", 6, 11800), ("Montaje en planta minera", "SERV", 1, 31500)])
+    quotation("COT-DUMMY-011", customer_ten, order_nine, [("Plataformas portuarias", "UND", 8, 7600), ("Protecciones y barandas", "KG", 1450, 11.2)])
+    quotation("COT-DUMMY-012", customer_eleven, order_ten, [("Parada y mantenimiento", "SERV", 1, 48200), ("Fabricación de repuestos", "KG", 860, 14.5)])
+    quotation("COT-DUMMY-013", customer_twelve, order_eleven, [("Cobertura de taller", "M2", 1800, 145), ("Estructura y montaje", "KG", 5200, 10.8)])
 
     def visit(title: str, customer_id: int, order_id: int | None, scheduled_at: str, address: str, latitude: str | None, longitude: str | None) -> None:
         cursor.execute("SELECT id FROM sell_technical_visits WHERE title = %s AND customer_id = %s", (title, customer_id))
@@ -915,22 +1260,34 @@ def seed_dummy_data(cursor) -> None:
     visit("Inspección de equipos críticos", customer_four, order_four, "2026-09-03 09:30:00", "Av. Parra 615", "-16.4090000", "-71.5375000")
     visit("Evaluación de plataforma", customer_five, None, "2026-09-25 14:00:00", "Panamericana Norte km 560", "-8.1090000", "-79.0215000")
     visit("Revisión de alcance", customer_three, None, "2026-10-18 11:00:00", "Av. Separadora Industrial 890", "-12.0201000", "-76.9902000")
+    visit("Levantamiento de módulos energéticos", customer_seven, order_six, "2026-01-05 09:00:00", "Av. Circunvalación 430", "-12.0670000", "-75.2100000")
+    visit("Inspección de línea de envasado", customer_eight, order_seven, "2026-02-05 10:30:00", "Carretera Industrial 800", "-8.1010000", "-79.0280000")
+    visit("Replanteo de faja transportadora", customer_nine, order_eight, "2026-03-20 08:30:00", "Parque Industrial Río Seco 120", "-16.3500000", "-71.5600000")
+    visit("Inspección de muelle", customer_ten, order_nine, "2026-07-01 14:00:00", "Av. Néstor Gambetta 1700", "-11.9700000", "-77.1100000")
+    visit("Planificación de parada", customer_eleven, order_ten, "2026-09-30 09:30:00", "Av. Separadora Industrial 150", "-12.0120000", "-76.9700000")
+    visit("Visita preliminar Sierra Azul", customer_twelve, order_eleven, "2026-11-10 11:00:00", "Av. Ejército 520", "-13.5200000", "-71.9700000")
 
     def project(code: str, name: str, order_id: int, status_value: str, end_date: str | None, description: str) -> int:
         cursor.execute("SELECT id FROM proj_projects WHERE project_code = %s", (code,))
         existing = cursor.fetchone()
         if existing:
             return existing["id"]
-        cursor.execute("SELECT approved_at FROM sell_service_orders WHERE id = %s", (order_id,))
+        cursor.execute("SELECT approved_at, project_due_date FROM sell_service_orders WHERE id = %s", (order_id,))
         order = cursor.fetchone()
         cursor.execute(
-            "INSERT INTO proj_projects (project_code, name, service_order_id, start_date, end_date, description, observations, status, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)",
-            (code, name, order_id, order["approved_at"], end_date, description, "Registro dummy para validar el directorio y el Gantt.", status_value, admin_id),
+            "INSERT INTO proj_projects (project_code, name, service_order_id, start_date, planned_end_date, end_date, description, observations, status, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            (code, name, order_id, order["approved_at"], order["project_due_date"], end_date, description, "Registro dummy para validar el directorio, el Gantt y la capacidad anual.", status_value, admin_id),
         )
         return cursor.lastrowid
 
     project_one = project("PRJ-DUMMY-001", "Estructura Planta Norte", order_one, "active", None, "Proyecto activo con documentación parcial por áreas.")
     project_two = project("PRJ-DUMMY-002", "Mantenimiento Línea 3", order_two, "completed", "2026-10-10", "Proyecto terminado para validar la fecha de término.")
+    project_three = project("PRJ-DUMMY-003", "Módulos Energéticos Centro", order_six, "completed", "2026-04-04", "Proyecto terminado con fabricación y montaje para analizar margen y productividad.")
+    project_four = project("PRJ-DUMMY-004", "Ampliación Línea de Envasado", order_seven, "completed", "2026-06-28", "Proyecto con solapamiento de ingeniería, compras y cuadrillas de montaje.")
+    project_five = project("PRJ-DUMMY-005", "Faja Transportadora Sur", order_eight, "completed", "2026-08-29", "Proyecto minero con materiales de alta resistencia y logística interprovincial.")
+    project_six = project("PRJ-DUMMY-006", "Plataformas Portuarias", order_nine, "active", None, "Proyecto activo con demanda de fabricación y montaje en paralelo.")
+    project_seven = project("PRJ-DUMMY-007", "Parada Mayor de Planta", order_ten, "active", None, "Proyecto de mantenimiento intensivo para medir concentración de mano de obra.")
+    project_eight = project("PRJ-DUMMY-008", "Taller Sierra Azul", order_eleven, "planned", None, "Proyecto futuro para observar backlog y capacidad contratada.")
 
     def worker(code: str, worker_type: str, full_name: str, document_type: str, document_number: str, role_title: str, specialty: str, hire_date: str) -> int:
         cursor.execute("SELECT id FROM hr_workers WHERE worker_code = %s", (code,))
@@ -993,6 +1350,24 @@ def seed_dummy_data(cursor) -> None:
         ("TMP-004", project_two, "2026-09-10", "2026-10-10", "completed", "day", "120", "180"),
         ("TMP-005", project_one, "2026-09-18", "2026-12-15", "active", "hour", "42", "320"),
         ("TMP-006", project_one, "2026-10-01", "2026-10-31", "completed", "day", "220", "80"),
+        ("EMP-011", project_three, "2026-01-10", "2026-04-04", "completed", "month", "5200", "420"),
+        ("TMP-006", project_three, "2026-01-15", "2026-03-30", "completed", "day", "220", "360"),
+        ("TMP-001", project_three, "2026-02-01", "2026-03-25", "completed", "hour", "38", "260"),
+        ("EMP-002", project_four, "2026-02-15", "2026-06-28", "completed", "month", "6200", "620"),
+        ("EMP-005", project_four, "2026-02-20", "2026-06-28", "completed", "month", "5600", "580"),
+        ("TMP-002", project_four, "2026-03-01", "2026-06-15", "completed", "day", "180", "480"),
+        ("EMP-003", project_five, "2026-04-01", "2026-08-29", "completed", "month", "4800", "640"),
+        ("EMP-011", project_five, "2026-04-15", "2026-08-20", "completed", "month", "5200", "520"),
+        ("TMP-003", project_five, "2026-05-01", "2026-08-20", "completed", "day", "165", "420"),
+        ("EMP-002", project_six, "2026-07-15", None, "active", "month", "6200", "640"),
+        ("EMP-007", project_six, "2026-08-01", None, "active", "month", "4400", "480"),
+        ("TMP-004", project_six, "2026-08-01", "2026-11-15", "active", "day", "120", "360"),
+        ("EMP-005", project_seven, "2026-10-15", None, "active", "month", "5600", "360"),
+        ("EMP-008", project_seven, "2026-10-15", None, "active", "month", "3600", "320"),
+        ("TMP-005", project_seven, "2026-10-20", "2026-12-20", "active", "hour", "42", "240"),
+        ("EMP-001", project_eight, "2026-12-01", "2027-04-20", "planned", "month", "8500", "720"),
+        ("EMP-011", project_eight, "2026-12-01", "2027-04-20", "planned", "month", "5200", "600"),
+        ("TMP-006", project_eight, "2027-01-15", "2027-04-20", "planned", "day", "220", "420"),
     ]:
         engagement_ids[f"{code}-{project_id}-{start_date}"] = engagement(code, project_id, start_date, end_date, state, unit, rate, hours)
 
@@ -1012,6 +1387,12 @@ def seed_dummy_data(cursor) -> None:
         ("TMP-002", f"TMP-002-{project_one}-2026-08-15", 18, 144, "3240", "3240", "pending"),
         ("TMP-003", f"TMP-003-{project_one}-2026-09-01", 20, 160, "3300", "3300", "pending"),
         ("TMP-005", f"TMP-005-{project_one}-2026-09-18", 16, 128, "5376", "5376", "pending"),
+        ("EMP-002", f"EMP-002-{project_six}-2026-07-15", 17, 136, "3513", "4216", "pending"),
+        ("EMP-007", f"EMP-007-{project_six}-2026-08-01", 17, 136, "2493", "2992", "pending"),
+        ("TMP-004", f"TMP-004-{project_six}-2026-08-01", 17, 136, "2040", "2040", "pending"),
+        ("EMP-005", f"EMP-005-{project_seven}-2026-10-15", 12, 96, "2240", "2688", "pending"),
+        ("EMP-008", f"EMP-008-{project_seven}-2026-10-15", 12, 96, "1440", "1728", "pending"),
+        ("TMP-005", f"TMP-005-{project_seven}-2026-10-20", 10, 80, "3360", "3360", "pending"),
     ]:
         cursor.execute("SELECT id FROM hr_payroll_lines WHERE period_id = %s AND worker_id = %s AND engagement_id = %s", (payroll_period_id, worker_ids[code], engagement_ids[engagement_key]))
         if cursor.fetchone():
@@ -1048,7 +1429,301 @@ def seed_dummy_data(cursor) -> None:
         area(project_one, area_key, contact, "2026-10-02", area_status, approved_at, filename, "Documento dummy para validar el flujo del área.")
     for area_key, contact in [("production", "Jorge Ramos"), ("quality", "Patricia León"), ("ssoma", "Raúl Vega")]:
         area(project_two, area_key, contact, "2026-09-16", "approved", "2026-09-18", f"PRJ-DUMMY-002-{area_key}", "Documentación dummy de proyecto terminado.")
+    for area_key, contact, area_status, approved_at in [
+        ("production", "Jorge Ramos", "approved", "2026-01-20"),
+        ("quality", "Patricia León", "approved", "2026-02-05"),
+        ("ssoma", "Raúl Vega", "approved", "2026-02-10"),
+    ]:
+        area(project_three, area_key, contact, "2026-01-18", area_status, approved_at, f"PRJ-DUMMY-003-{area_key}", "Documento dummy de módulos energéticos.")
+    for area_key, contact, area_status, approved_at in [
+        ("production", "Jorge Ramos", "approved", "2026-03-01"),
+        ("quality", "Patricia León", "in_review", None),
+        ("technical-office", "Sofía Cárdenas", "approved", "2026-02-28"),
+    ]:
+        area(project_four, area_key, contact, "2026-02-20", area_status, approved_at, f"PRJ-DUMMY-004-{area_key}", "Documento dummy de ampliación de línea.")
+    for area_key, contact, area_status, approved_at in [
+        ("production", "Jorge Ramos", "approved", "2026-05-01"),
+        ("ssoma", "Raúl Vega", "approved", "2026-05-04"),
+        ("resident", "Miguel Huamán", "approved", "2026-05-10"),
+    ]:
+        area(project_five, area_key, contact, "2026-04-20", area_status, approved_at, f"PRJ-DUMMY-005-{area_key}", "Documento dummy de montaje minero.")
+    for area_key, contact, area_status, approved_at in [
+        ("production", "Jorge Ramos", "in_review", None),
+        ("quality", "Patricia León", "pending", None),
+        ("resident", "Miguel Huamán", "approved", "2026-08-05"),
+    ]:
+        area(project_six, area_key, contact, "2026-07-25", area_status, approved_at, f"PRJ-DUMMY-006-{area_key}", "Documento dummy de plataformas portuarias.")
+    for area_key, contact, area_status, approved_at in [
+        ("production", "Jorge Ramos", "in_review", None),
+        ("quality", "Patricia León", "pending", None),
+        ("administration", "Elena Ruiz", "approved", "2026-10-20"),
+    ]:
+        area(project_seven, area_key, contact, "2026-10-18", area_status, approved_at, f"PRJ-DUMMY-007-{area_key}", "Documento dummy de parada mayor.")
+    for area_key, contact in [("administration", "Elena Ruiz"), ("technical-office", "Sofía Cárdenas"), ("planning", "Ana Salazar")]:
+        area(project_eight, area_key, contact, "2026-12-01", "pending", None, None, "Documento pendiente para proyecto planificado.")
     ensure_project_area_tasks(cursor)
+    seed_finance_dummy_data(cursor, admin_id)
+    seed_operations_dummy_data(cursor, admin_id)
+
+
+def seed_operations_dummy_data(cursor, admin_id: int) -> None:
+    materials = [
+        ("MAT-AC-A36", "Plancha de acero A36", "raw_material", "KG", 500, 1250),
+        ("MAT-PERFIL-I", "Perfil estructural I", "raw_material", "KG", 300, 420),
+        ("CON-SOLD-7018", "Electrodo soldadura 7018", "consumable", "KG", 40, 18),
+        ("CON-DISCO-230", "Disco de corte 230 mm", "consumable", "UND", 60, 24),
+        ("CON-GAS-OXI", "Gas oxígeno industrial", "gas", "BAL", 8, 5),
+        ("CON-PINT-EPOX", "Pintura epóxica industrial", "paint", "GLN", 25, 32),
+    ]
+    material_ids = {}
+    for code, name, category, unit, minimum, stock in materials:
+        cursor.execute("SELECT id FROM inv_materials WHERE item_code = %s", (code,))
+        existing = cursor.fetchone()
+        if existing:
+            material_id = existing["id"]
+        else:
+            cursor.execute("INSERT INTO inv_materials (item_code, name, category, unit, minimum_stock, current_stock, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)", (code, name, category, unit, minimum, 0, admin_id))
+            material_id = cursor.lastrowid
+            cursor.execute("INSERT INTO inv_stock_movements (material_id, movement_type, quantity, reference, notes, created_by) VALUES (%s, 'receipt', %s, 'INICIAL-2026', 'Carga inicial de inventario demo.', %s)", (material_id, stock, admin_id))
+            cursor.execute("UPDATE inv_materials SET current_stock = %s WHERE id = %s", (stock, material_id))
+        material_ids[code] = material_id
+    average_material_costs = {"MAT-AC-A36": 8.5, "MAT-PERFIL-I": 11.2, "CON-SOLD-7018": 24, "CON-DISCO-230": 24, "CON-GAS-OXI": 5, "CON-PINT-EPOX": 78}
+    for code, average_cost in average_material_costs.items():
+        cursor.execute("UPDATE inv_materials SET average_unit_cost = %s WHERE id = %s", (average_cost, material_ids[code]))
+    material_ids.update(ensure_inventory_catalog(cursor, admin_id))
+    cursor.execute("UPDATE prod_bom_lines SET line_type = 'steel', material_id = %s, unit = 'KG', estimated_unit_cost = %s, description = CONCAT('Acero A36 para ', description), cost_source = 'average', quotation_id = NULL WHERE line_type = 'labor'", (material_ids["MAT-AC-A36"], average_material_costs["MAT-AC-A36"]))
+
+    cursor.execute("SELECT id FROM proj_projects ORDER BY id LIMIT 1")
+    project = cursor.fetchone()
+    project_id = project["id"] if project else None
+    cursor.execute("SELECT id FROM prod_work_orders WHERE wo_code = 'OT-DUMMY-001'")
+    work_order = cursor.fetchone()
+    if not work_order and project_id:
+        cursor.execute("SELECT service_order_id FROM proj_projects WHERE id = %s", (project_id,))
+        service_order = cursor.fetchone()
+        cursor.execute("INSERT INTO prod_work_orders (wo_code, project_id, service_order_id, title, description, status, priority, planned_start, planned_end, estimated_hours, created_by) VALUES ('OT-DUMMY-001', %s, %s, 'Fabricación de estructura principal', 'OT demo asociada al proyecto para probar trazabilidad de fabricación.', 'in_progress', 'high', '2026-10-05', '2026-11-15', 148, %s)", (project_id, service_order["service_order_id"] if service_order else None, admin_id))
+        work_order_id = cursor.lastrowid
+        for sequence, code, name, station, hours in [(1, "CUT", "Corte", "Sierra cinta", 24), (2, "BEND", "Doblez", "Prensa hidráulica", 28), (3, "WELD", "Soldadura", "Celda de soldadura", 62), (4, "PAINT", "Pintado", "Cabina de pintura", 34)]:
+            cursor.execute("INSERT INTO prod_work_order_steps (work_order_id, sequence_no, process_code, process_name, station, estimated_hours, status) VALUES (%s, %s, %s, %s, %s, %s, %s)", (work_order_id, sequence, code, name, station, hours, "completed" if sequence < 3 else "in_progress"))
+        cursor.execute("INSERT INTO prod_work_order_documents (work_order_id, document_name, file_name, file_type, version, is_current, notes, created_by) VALUES (%s, 'Plano de fabricación', 'estructura-principal-revB.pdf', 'PDF', 'Rev B', 1, 'Versión vigente para fabricación.', %s)", (work_order_id, admin_id))
+        cursor.execute("SELECT id FROM prod_work_order_steps WHERE work_order_id = %s ORDER BY sequence_no LIMIT 2", (work_order_id,))
+        for step in cursor.fetchall():
+            cursor.execute("INSERT INTO prod_time_logs (work_order_id, step_id, operator_name, station, started_at, ended_at, hours, notes, created_by) VALUES (%s, %s, %s, %s, '2026-10-06 08:00:00', '2026-10-06 13:00:00', %s, 'Registro demo de horas reales.', %s)", (work_order_id, step["id"], "Jorge Ramos", "Producción", 4.5 if step["id"] % 2 else 5, admin_id))
+        cursor.execute("SELECT id FROM inv_remnants WHERE remnant_code = 'RET-DUMMY-001'")
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO inv_remnants (remnant_code, material_id, description, dimensions, quantity, unit, status, source_work_order_id, notes, created_by) VALUES ('RET-DUMMY-001', %s, 'Retazo de plancha A36 aprovechable', '450 x 900 x 6 mm', 1, 'UND', 'available', %s, 'Disponible para futuras OTs.', %s)", (material_ids["MAT-AC-A36"], work_order_id, admin_id))
+
+    cursor.execute("SELECT id, project_code FROM proj_projects ORDER BY id LIMIT 3")
+    for project in cursor.fetchall():
+        bom_code = f"BOM-{project['project_code']}"
+        cursor.execute("SELECT id FROM prod_boms WHERE bom_code = %s", (bom_code,))
+        bom = cursor.fetchone()
+        if bom:
+            bom_id = bom["id"]
+        else:
+            cursor.execute("INSERT INTO prod_boms (project_id, bom_code, version, status, notes, created_by) VALUES (%s, %s, 'Rev A', 'approved', 'BOM demo por proyecto: acero, pintura, consumibles y mano de obra.', %s)", (project["id"], bom_code, admin_id))
+            bom_id = cursor.lastrowid
+            pieces = [
+                ("PZA-01", "Conjunto estructural principal", 1),
+                ("PZA-02", "Conjunto de refuerzos y uniones", 1),
+                ("PZA-03", "Conjunto de acabado y montaje", 1),
+            ]
+            piece_ids = []
+            for line_code, description, quantity in pieces:
+                cursor.execute("INSERT INTO prod_bom_lines (bom_id, line_code, line_kind, line_type, description, quantity, unit, estimated_unit_cost) VALUES (%s, %s, 'piece', 'material', %s, %s, 'UND', 0)", (bom_id, line_code, description, quantity))
+                piece_ids.append(cursor.lastrowid)
+            lines = [
+                (piece_ids[0], "steel", material_ids["MAT-AC-A36"], "Plancha de acero A36 para cuerpo principal", 650, "KG", 8.5),
+                (piece_ids[0], "labor", None, "Corte y preparación de cuerpo principal", 42, "H", 42),
+                (piece_ids[1], "steel", material_ids["MAT-PERFIL-I"], "Perfil estructural I para refuerzos", 240, "KG", 11.2),
+                (piece_ids[1], "consumable", material_ids["CON-SOLD-7018"], "Electrodos de soldadura para uniones", 18, "KG", 24),
+                (piece_ids[1], "labor", None, "Soldadura y montaje de refuerzos", 54, "H", 42),
+                (piece_ids[2], "paint", material_ids.get("MAT-PINT-EPOX", material_ids["CON-PINT-EPOX"]), "Pintura epóxica y primer de acabado", 12, "GLN", 220),
+                (piece_ids[2], "labor", None, "Pintado, inspección y montaje final", 24, "H", 42),
+            ]
+            for index, (parent_id, line_type, material_id, description, quantity, unit, unit_cost) in enumerate(lines, 1):
+                cursor.execute("INSERT INTO prod_bom_lines (bom_id, parent_line_id, line_code, line_kind, line_type, material_id, description, quantity, unit, estimated_unit_cost) VALUES (%s, %s, %s, 'element', %s, %s, %s, %s, %s, %s)", (bom_id, parent_id, f"EL-{index:02d}", line_type, material_id, description, quantity, unit, unit_cost))
+
+        cursor.execute("SELECT id FROM prod_bom_lines WHERE bom_id = %s AND line_kind = 'piece' ORDER BY id", (bom_id,))
+        piece_rows = cursor.fetchall()
+        if not piece_rows:
+            cursor.execute("SELECT id FROM prod_bom_lines WHERE bom_id = %s ORDER BY id", (bom_id,))
+            legacy_lines = cursor.fetchall()
+            for line_code, description in [("PZA-01", "Conjunto estructural principal"), ("PZA-02", "Conjunto de refuerzos y uniones"), ("PZA-03", "Conjunto de acabado y montaje")]:
+                cursor.execute("INSERT INTO prod_bom_lines (bom_id, line_code, line_kind, line_type, description, quantity, unit, estimated_unit_cost) VALUES (%s, %s, 'piece', 'material', %s, 1, 'UND', 0)", (bom_id, line_code, description))
+            cursor.execute("SELECT id FROM prod_bom_lines WHERE bom_id = %s AND line_kind = 'piece' ORDER BY id", (bom_id,))
+            piece_rows = cursor.fetchall()
+            for index, line in enumerate(legacy_lines):
+                parent_id = piece_rows[index % len(piece_rows)]["id"]
+                cursor.execute("UPDATE prod_bom_lines SET parent_line_id = %s, line_code = %s, line_kind = 'element' WHERE id = %s", (parent_id, f"EL-{index + 1:02d}", line["id"]))
+        plan_code = f"PLAN-{project['project_code']}"
+        cursor.execute("SELECT id FROM prod_plans WHERE plan_code = %s", (plan_code,))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO prod_plans (project_id, plan_code, name, bom_id, starts_on, ends_on, status, planned_hours, notes, created_by) VALUES (%s, %s, %s, %s, '2026-10-05', '2026-11-20', 'in_progress', 148, 'Plan demo con secuencia de fabricación, inspección y entrega.', %s)", (project["id"], plan_code, f"Plan de producción · {project['project_code']}", bom_id, admin_id))
+    ensure_production_work_order_coverage(cursor, admin_id)
+
+
+def ensure_inventory_catalog(cursor, admin_id: int) -> dict[str, int]:
+    """Keep the production catalog aligned with purchased materials and shop PPE."""
+    catalog = [
+        ("MAT-AC-A36", "Plancha de acero ASTM A36", "raw_material", "KG", 500, 500, 0, 8.50),
+        ("MAT-AC-A572", "Plancha de acero ASTM A572 Gr 50", "raw_material", "KG", 250, 180, 620, 13.30),
+        ("MAT-AC-GALV", "Plancha de acero galvanizado", "raw_material", "KG", 180, 95, 0, 13.00),
+        ("MAT-AC-304", "Plancha de acero inoxidable AISI 304", "raw_material", "KG", 120, 60, 190, 115.00),
+        ("MAT-AC-316", "Plancha de acero inoxidable AISI 316", "raw_material", "KG", 80, 45, 0, 148.00),
+        ("MAT-PERFIL-IPE200", "Perfil IPE 200 · acero estructural", "raw_material", "M", 80, 42, 24, 185.00),
+        ("MAT-PERFIL-HEA200", "Perfil HEA 200 · acero estructural", "raw_material", "M", 60, 18, 36, 245.00),
+        ("MAT-PERFIL-UPN160", "Perfil UPN 160 · canal estructural", "raw_material", "M", 70, 26, 48, 165.00),
+        ("MAT-ANGULO-L50X5", "Perfil angular L 50 x 50 x 5 mm", "raw_material", "M", 100, 75, 0, 42.00),
+        ("MAT-TUBO-RHS100X50", "Tubo rectangular RHS 100 x 50 x 4 mm", "raw_material", "M", 90, 32, 30, 96.00),
+        ("MAT-PLATINA-50X6", "Platina de acero 50 x 6 mm", "raw_material", "M", 100, 55, 0, 28.00),
+        ("MAT-PINT-EPOX", "Pintura epóxica industrial · kit", "paint", "GLN", 20, 8, 18, 220.00),
+        ("MAT-PINT-PU", "Pintura poliuretano industrial", "paint", "GLN", 12, 6, 12, 236.67),
+        ("EPP-CASCO", "Casco de seguridad con protección facial", "ppe", "UND", 12, 18, 0, 48.00),
+        ("EPP-GAFAS", "Gafas de seguridad antiimpacto", "ppe", "UND", 20, 34, 0, 12.00),
+        ("EPP-GUANTE-CORTE", "Guantes anticorte para manipulación", "ppe", "PAR", 24, 28, 0, 18.00),
+        ("EPP-GUANTE-SOLD", "Guantes de cuero para soldadura", "ppe", "PAR", 16, 14, 12, 32.00),
+        ("EPP-RESPIRADOR", "Respirador para humos y pintura", "ppe", "UND", 12, 10, 18, 44.00),
+        ("EPP-CARETA-SOLD", "Careta electrónica para soldadura", "ppe", "UND", 8, 6, 4, 185.00),
+        ("EPP-PROTECTOR-AUD", "Protección auditiva tipo copa", "ppe", "UND", 12, 15, 0, 36.00),
+        ("EPP-BOTA-SEG", "Botas de seguridad con puntera", "ppe", "PAR", 12, 16, 0, 145.00),
+    ]
+    ids = {}
+    for code, name, category, unit, minimum, warehouse, transit, average_cost in catalog:
+        cursor.execute("SELECT id FROM inv_materials WHERE item_code = %s", (code,))
+        existing = cursor.fetchone()
+        if existing:
+            material_id = existing["id"]
+            cursor.execute("UPDATE inv_materials SET average_unit_cost = %s, in_transit_stock = CASE WHEN in_transit_stock = 0 THEN %s ELSE in_transit_stock END WHERE id = %s", (average_cost, transit, material_id))
+        else:
+            cursor.execute("INSERT INTO inv_materials (item_code, name, category, unit, minimum_stock, current_stock, in_transit_stock, average_unit_cost, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (code, name, category, unit, minimum, warehouse, transit, average_cost, admin_id))
+            material_id = cursor.lastrowid
+            if warehouse:
+                cursor.execute("INSERT INTO inv_stock_movements (material_id, movement_type, quantity, reference, notes, created_by) VALUES (%s, 'receipt', %s, 'INICIAL-CATALOGO-2026', 'Carga inicial de catálogo de perfiles, pintura y EPP.', %s)", (material_id, warehouse, admin_id))
+        ids[code] = material_id
+    cursor.execute("SELECT bi.item_code, SUM(CASE WHEN o.status IN ('draft', 'confirmed', 'issued') THEN r.quantity ELSE 0 END) AS transit_quantity FROM buy_purchase_orders o JOIN buy_purchase_quotations q ON q.id = o.quotation_id JOIN buy_purchase_requests r ON r.id = q.request_id JOIN buy_items bi ON bi.id = r.item_id GROUP BY bi.item_code")
+    for purchase in cursor.fetchall():
+        if purchase["item_code"] in ids:
+            cursor.execute("UPDATE inv_materials SET in_transit_stock = %s WHERE id = %s", (purchase["transit_quantity"] or 0, ids[purchase["item_code"]]))
+    return ids
+
+
+def ensure_production_work_order_coverage(cursor, admin_id: int) -> None:
+    """Create one piece OT per BOM piece plus one assembly OT per project."""
+    cursor.execute("SELECT id FROM prod_work_orders WHERE wo_code = 'OT-DUMMY-001'")
+    legacy = cursor.fetchone()
+    if legacy:
+        cursor.execute("SELECT id FROM prod_work_orders WHERE wo_code = 'OT-PRJ-DUMMY-001-ENS'")
+        generated_assembly = cursor.fetchone()
+        if generated_assembly and generated_assembly["id"] != legacy["id"]:
+            cursor.execute("DELETE FROM prod_time_logs WHERE work_order_id = %s", (generated_assembly["id"],))
+            cursor.execute("DELETE FROM prod_work_order_documents WHERE work_order_id = %s", (generated_assembly["id"],))
+            cursor.execute("DELETE FROM prod_work_order_steps WHERE work_order_id = %s", (generated_assembly["id"],))
+            cursor.execute("DELETE FROM prod_work_orders WHERE id = %s", (generated_assembly["id"],))
+        cursor.execute("UPDATE prod_work_orders SET wo_code = 'OT-PRJ-DUMMY-001-ENS', work_order_type = 'assembly', bom_line_id = NULL, title = 'Ensamblaje final del proyecto' WHERE id = %s", (legacy["id"],))
+
+    cursor.execute("SELECT id, project_code, name, service_order_id, start_date, planned_end_date FROM proj_projects ORDER BY id")
+    for project in cursor.fetchall():
+        cursor.execute("SELECT id FROM prod_boms WHERE project_id = %s ORDER BY created_at DESC LIMIT 1", (project["id"],))
+        bom = cursor.fetchone()
+        if bom and project["project_code"] == "PRJ-DUMMY-001":
+            cursor.execute("SELECT COUNT(*) AS total FROM prod_bom_lines WHERE bom_id = %s AND line_kind = 'piece'", (bom["id"],))
+            piece_count = cursor.fetchone()["total"]
+            for number in range(piece_count + 1, 6):
+                cursor.execute("INSERT INTO prod_bom_lines (bom_id, line_code, line_kind, line_type, description, quantity, unit, estimated_unit_cost) VALUES (%s, %s, 'piece', 'material', %s, 1, 'UND', 0)", (bom["id"], f"PZA-{number:02d}", f"Pieza fabricada adicional {number}"))
+        pieces = []
+        if bom:
+            cursor.execute("SELECT id, line_code, description FROM prod_bom_lines WHERE bom_id = %s AND line_kind = 'piece' ORDER BY id", (bom["id"],))
+            pieces = cursor.fetchall()
+        for index, piece in enumerate(pieces, 1):
+            wo_code = f"OT-{project['project_code']}-{piece['line_code']}"
+            cursor.execute("SELECT id FROM prod_work_orders WHERE wo_code = %s OR (project_id = %s AND bom_line_id = %s)", (wo_code, project["id"], piece["id"]))
+            if cursor.fetchone():
+                continue
+            cursor.execute("INSERT INTO prod_work_orders (wo_code, project_id, service_order_id, bom_line_id, work_order_type, title, description, status, priority, planned_start, planned_end, estimated_hours, created_by) VALUES (%s, %s, %s, %s, 'piece', %s, %s, 'released', 'normal', %s, %s, %s, %s)", (wo_code, project["id"], project["service_order_id"], piece["id"], f"Fabricación · {piece['line_code']}", f"OT de pieza para {piece['description']}", project["start_date"], project["planned_end_date"], 24 + (index * 8), admin_id))
+            work_order_id = cursor.lastrowid
+            for sequence, code, name, station, hours in [(1, "CUT", "Corte", "Sierra cinta", 6), (2, "BEND", "Doblez", "Prensa hidráulica", 6), (3, "WELD", "Soldadura", "Celda de soldadura", 8), (4, "PAINT", "Pintado", "Cabina de pintura", 4)]:
+                cursor.execute("INSERT INTO prod_work_order_steps (work_order_id, sequence_no, process_code, process_name, station, estimated_hours, status) VALUES (%s, %s, %s, %s, %s, %s, 'pending')", (work_order_id, sequence, code, name, station, hours))
+        cursor.execute("SELECT id FROM prod_work_orders WHERE project_id = %s AND work_order_type = 'assembly' LIMIT 1", (project["id"],))
+        if not cursor.fetchone():
+            wo_code = f"OT-{project['project_code']}-ENS"
+            cursor.execute("SELECT id FROM prod_work_orders WHERE wo_code = %s", (wo_code,))
+            if not cursor.fetchone():
+                cursor.execute("INSERT INTO prod_work_orders (wo_code, project_id, service_order_id, work_order_type, title, description, status, priority, planned_start, planned_end, estimated_hours, created_by) VALUES (%s, %s, %s, 'assembly', 'Ensamblaje final del proyecto', 'OT de integración, inspección y entrega del proyecto.', 'released', 'high', %s, %s, 36, %s)", (wo_code, project["id"], project["service_order_id"], project["start_date"], project["planned_end_date"], admin_id))
+                work_order_id = cursor.lastrowid
+                for sequence, code, name, station, hours in [(1, "ASSEMBLY", "Ensamblaje", "Área de montaje", 20), (2, "QA", "Inspección final", "Control de calidad", 8), (3, "DELIVERY", "Despacho", "Patio de entrega", 8)]:
+                    cursor.execute("INSERT INTO prod_work_order_steps (work_order_id, sequence_no, process_code, process_name, station, estimated_hours, status) VALUES (%s, %s, %s, %s, %s, %s, 'pending')", (work_order_id, sequence, code, name, station, hours))
+        if not bom and project["project_code"] != "PRJ-DUMMY-001":
+            cursor.execute("SELECT id FROM prod_work_orders WHERE project_id = %s LIMIT 1", (project["id"],))
+            if not cursor.fetchone():
+                wo_code = f"OT-{project['project_code']}-PROY"
+                cursor.execute("INSERT INTO prod_work_orders (wo_code, project_id, service_order_id, work_order_type, title, description, status, priority, planned_start, planned_end, estimated_hours, created_by) VALUES (%s, %s, %s, 'project', 'Fabricación integral del proyecto', 'OT de cobertura general mientras se desglosa el BOM.', 'draft', 'normal', %s, %s, 24, %s)", (wo_code, project["id"], project["service_order_id"], project["start_date"], project["planned_end_date"], admin_id))
+
+
+def seed_finance_dummy_data(cursor, admin_id: int) -> None:
+    """Create a usable financial view from the independent sales, buying and HR data."""
+    cursor.execute("SELECT id FROM acc_companies WHERE tax_id = %s", ("20609999991",))
+    company = cursor.fetchone()
+    if company:
+        company_id = company["id"]
+    else:
+        cursor.execute("INSERT INTO acc_companies (name, tax_id, description, default_currency) VALUES (%s, %s, %s, 'PEN')", ("MetalMecánica Andina S.A.C.", "20609999991", "Compañía demo para analizar el flujo financiero independiente."))
+        company_id = cursor.lastrowid
+
+    cursor.execute("SELECT id FROM acc_fiscal_years WHERE company_id = %s AND name = 'FY 2026'", (company_id,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO acc_fiscal_years (company_id, name, starts_on, ends_on) VALUES (%s, 'FY 2026', '2026-01-01', '2026-12-31')", (company_id,))
+    cursor.execute("SELECT id FROM acc_fiscal_years WHERE company_id = %s AND name = 'FY 2027'", (company_id,))
+    if not cursor.fetchone():
+        cursor.execute("INSERT INTO acc_fiscal_years (company_id, name, starts_on, ends_on) VALUES (%s, 'FY 2027', '2027-01-01', '2027-12-31')", (company_id,))
+
+    accounts = [
+        ("10", "Activo", "Asset", "Group", 1), ("101", "Caja y bancos", "Asset", "Cash", 0),
+        ("12", "Cuentas por cobrar comerciales", "Asset", "Receivable", 0),
+        ("20", "Pasivo", "Liability", "Group", 1), ("40", "Tributos por pagar", "Liability", "Tax", 0),
+        ("42", "Cuentas por pagar comerciales", "Liability", "Payable", 0),
+        ("70", "Ventas", "Income", "Income", 0), ("60", "Compras y costos directos", "Expense", "Expense", 0),
+        ("62", "Gastos de personal", "Expense", "Expense", 0),
+    ]
+    for code, name, root_type, account_type, is_group in accounts:
+        cursor.execute("SELECT id FROM acc_accounts WHERE company_id = %s AND code = %s", (company_id, code))
+        if not cursor.fetchone():
+            cursor.execute("INSERT INTO acc_accounts (company_id, code, name, root_type, account_type, is_group) VALUES (%s, %s, %s, %s, %s, %s)", (company_id, code, name, root_type, account_type, is_group))
+
+    cursor.execute("SELECT id FROM acc_banks WHERE name = 'Banco de Crédito del Perú' AND country = 'Perú'")
+    bank = cursor.fetchone()
+    if bank:
+        bank_id = bank["id"]
+    else:
+        cursor.execute("INSERT INTO acc_banks (name, country, website, api_provider, integration_status, notes) VALUES ('Banco de Crédito del Perú', 'Perú', 'https://www.viabcp.com', 'Pendiente de evaluar', 'research', 'Investigar tasas para capital de trabajo, leasing y confirming.')")
+        bank_id = cursor.lastrowid
+
+    cursor.execute("SELECT id FROM acc_cash_accounts WHERE company_id = %s AND code = 'BCP-PEN'", (company_id,))
+    cash_account = cursor.fetchone()
+    if cash_account:
+        cash_account_id = cash_account["id"]
+        cursor.execute("UPDATE acc_cash_accounts SET bank_id = %s WHERE id = %s", (bank_id, cash_account_id))
+    else:
+        cursor.execute("INSERT INTO acc_cash_accounts (company_id, bank_id, code, name, account_type, bank_name, account_number_masked, opening_balance) VALUES (%s, %s, 'BCP-PEN', 'Cuenta corriente principal', 'bank', 'Banco de Crédito del Perú', '**** 4821', 85000)", (company_id, bank_id))
+        cash_account_id = cursor.lastrowid
+
+    def movement(values: tuple) -> None:
+        cursor.execute("SELECT id FROM acc_cash_movements WHERE company_id = %s AND source_type = %s AND source_id = %s", (company_id, values[-3], values[-2]))
+        if cursor.fetchone():
+            return
+        cursor.execute("INSERT INTO acc_cash_movements (company_id, cash_account_id, movement_date, direction, category, description, reference, amount, status, source_type, source_id, project_id, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (company_id, cash_account_id, *values, admin_id))
+
+    cursor.execute("SELECT q.id, q.quote_code, o.approved_at, o.order_code, COALESCE(SUM(i.subtotal), 0) * 1.18 AS total, p.id AS project_id FROM sell_quotations q JOIN sell_service_orders o ON o.id = q.service_order_id LEFT JOIN sell_quotation_items i ON i.quotation_id = q.id LEFT JOIN proj_projects p ON p.service_order_id = o.id WHERE q.service_order_id IS NOT NULL GROUP BY q.id, q.quote_code, o.approved_at, o.order_code, p.id ORDER BY q.id")
+    for index, row in enumerate(cursor.fetchall()):
+        movement((row["approved_at"], "inflow", "sales", f"Cobro proyectado · {row['order_code']}", row["quote_code"], row["total"], "cleared" if index % 3 == 0 else "pending", "sales_quotation", row["id"], row["project_id"]))
+
+    cursor.execute("SELECT id, invoice_code, invoice_date, total_amount, status FROM buy_purchase_invoices ORDER BY id")
+    for index, row in enumerate(cursor.fetchall()):
+        movement((row["invoice_date"], "outflow", "purchases", f"Pago a proveedor · {row['invoice_code']}", row["invoice_code"], row["total_amount"], "cleared" if row["status"] == "paid" or index % 4 == 0 else "pending", "purchase_invoice", row["id"], None))
+
+    cursor.execute("SELECT l.id, p.ends_on, l.employer_cost, p.period_code, l.payment_status, e.project_id FROM hr_payroll_lines l JOIN hr_payroll_periods p ON p.id = l.period_id LEFT JOIN hr_engagements e ON e.id = l.engagement_id ORDER BY l.id")
+    for row in cursor.fetchall():
+        movement((row["ends_on"], "outflow", "payroll", f"Planilla · {row['period_code']}", row["period_code"], row["employer_cost"], "cleared" if row["payment_status"] == "paid" else "pending", "payroll_line", row["id"], row["project_id"]))
 
 
 def ensure_project_area_tasks(cursor) -> None:
@@ -1117,6 +1792,26 @@ class CompanyUpdateRequest(BaseModel):
     default_currency: str = Field(min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
 
 
+class BankRequest(BaseModel):
+    name: str = Field(min_length=2, max_length=160)
+    country: str = Field(default="Perú", min_length=2, max_length=80)
+    website: str | None = Field(default=None, max_length=255)
+    api_provider: str | None = Field(default=None, max_length=160)
+    integration_status: str = Field(default="research", pattern=r"^(research|planned|connected|paused)$")
+    notes: str | None = Field(default=None, max_length=4000)
+
+
+class CashAccountRequest(BaseModel):
+    company_id: int
+    bank_id: int | None = None
+    code: str = Field(min_length=2, max_length=30)
+    name: str = Field(min_length=2, max_length=160)
+    account_type: str = Field(default="bank", pattern=r"^(bank|cash|credit)$")
+    bank_name: str | None = Field(default=None, max_length=120)
+    account_number_masked: str | None = Field(default=None, max_length=40)
+    opening_balance: Decimal = Field(default=Decimal("0"), ge=0)
+
+
 class FiscalYearRequest(BaseModel):
     company_id: int
     name: str = Field(min_length=2, max_length=80)
@@ -1149,6 +1844,119 @@ class JournalEntryRequest(BaseModel):
     reference: str | None = Field(default=None, max_length=120)
     remarks: str | None = None
     lines: list[JournalLineRequest] = Field(min_length=2)
+
+
+class WorkOrderStepRequest(BaseModel):
+    sequence_no: int = Field(ge=1)
+    process_code: str = Field(min_length=2, max_length=30)
+    process_name: str = Field(min_length=2, max_length=80)
+    station: str | None = Field(default=None, max_length=100)
+    estimated_hours: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class WorkOrderRequest(BaseModel):
+    wo_code: str = Field(min_length=2, max_length=60)
+    project_id: int | None = None
+    service_order_id: int | None = None
+    bom_line_id: int | None = None
+    work_order_type: str = Field(default="project", pattern=r"^(piece|assembly|project)$")
+    title: str = Field(min_length=2, max_length=180)
+    description: str | None = None
+    status: str = Field(default="draft", pattern=r"^(draft|released|in_progress|paused|completed|cancelled)$")
+    priority: str = Field(default="normal", pattern=r"^(low|normal|high|urgent)$")
+    planned_start: date | None = None
+    planned_end: date | None = None
+    estimated_hours: Decimal = Field(default=Decimal("0"), ge=0)
+    steps: list[WorkOrderStepRequest] = Field(default_factory=list)
+
+
+class WorkOrderDocumentRequest(BaseModel):
+    document_name: str = Field(min_length=2, max_length=180)
+    file_name: str = Field(min_length=2, max_length=255)
+    file_type: str = Field(default="PDF", pattern=r"^(PDF|CAD|DWG|DXF|STEP|OTHER)$")
+    version: str = Field(min_length=1, max_length=40)
+    is_current: bool = True
+    notes: str | None = None
+
+
+class BomRequest(BaseModel):
+    project_id: int
+    bom_code: str | None = Field(default=None, min_length=2, max_length=60)
+    version: str = Field(default="Rev A", max_length=40)
+    status: str = Field(default="draft", pattern=r"^(draft|approved|obsolete)$")
+    notes: str | None = None
+
+
+class BomLineRequest(BaseModel):
+    parent_line_id: int | None = None
+    line_code: str | None = Field(default=None, max_length=60)
+    line_kind: str = Field(default="element", pattern=r"^(piece|element)$")
+    line_type: str = Field(pattern=r"^(steel|paint|material|consumable)$")
+    material_id: int | None = None
+    description: str = Field(min_length=2, max_length=180)
+    quantity: Decimal = Field(gt=0)
+    unit: str = Field(default="UND", max_length=20)
+    estimated_unit_cost: Decimal = Field(default=Decimal("0"), ge=0)
+    notes: str | None = None
+
+
+class BomLineQuantityRequest(BaseModel):
+    quantity: Decimal = Field(gt=0)
+    material_id: int | None = None
+    cost_source: str = Field(default="average", pattern=r"^(average|quotation)$")
+    quotation_id: int | None = None
+
+
+class ProductionPlanRequest(BaseModel):
+    project_id: int
+    plan_code: str = Field(min_length=2, max_length=60)
+    name: str = Field(min_length=2, max_length=180)
+    bom_id: int | None = None
+    starts_on: date | None = None
+    ends_on: date | None = None
+    status: str = Field(default="draft", pattern=r"^(draft|released|in_progress|completed|cancelled)$")
+    planned_hours: Decimal = Field(default=Decimal("0"), ge=0)
+    notes: str | None = None
+
+
+class TimeLogRequest(BaseModel):
+    work_order_id: int
+    step_id: int
+    operator_name: str = Field(min_length=2, max_length=180)
+    station: str | None = Field(default=None, max_length=100)
+    started_at: datetime
+    ended_at: datetime | None = None
+    hours: Decimal = Field(default=Decimal("0"), ge=0)
+    notes: str | None = None
+
+
+class InventoryMaterialRequest(BaseModel):
+    item_code: str = Field(min_length=2, max_length=60)
+    name: str = Field(min_length=2, max_length=180)
+    category: str = Field(default="raw_material", pattern=r"^(raw_material|consumable|hardware|gas|paint)$")
+    unit: str = Field(default="UND", max_length=20)
+    minimum_stock: Decimal = Field(default=Decimal("0"), ge=0)
+
+
+class StockMovementRequest(BaseModel):
+    material_id: int
+    movement_type: str = Field(pattern=r"^(receipt|issue|adjustment|consume|return|remnant)$")
+    quantity: Decimal = Field(gt=0)
+    reference: str | None = Field(default=None, max_length=120)
+    work_order_id: int | None = None
+    notes: str | None = None
+
+
+class RemnantRequest(BaseModel):
+    remnant_code: str = Field(min_length=2, max_length=60)
+    material_id: int
+    description: str = Field(min_length=2, max_length=255)
+    dimensions: str | None = Field(default=None, max_length=120)
+    quantity: Decimal = Field(gt=0)
+    unit: str = Field(default="UND", max_length=20)
+    status: str = Field(default="available", pattern=r"^(available|reserved|consumed|scrapped)$")
+    source_work_order_id: int | None = None
+    notes: str | None = None
 
 
 class CustomerRequest(BaseModel):
@@ -1625,6 +2433,576 @@ def require_hr(token: str | None) -> dict:
     if user["role"] not in {"admin", "hr"}:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="RR.HH. role required")
     return user
+
+
+def require_operations(token: str | None) -> dict:
+    user = current_user(token)
+    if user["role"] not in {"admin", "user", "accounts", "selling", "hr"}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Operations role required")
+    return user
+
+
+@app.get("/production/work-orders")
+def production_work_orders(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT w.id, w.wo_code, w.project_id, p.project_code, p.name AS project_name, w.service_order_id, so.order_code, w.bom_line_id, bl.line_code AS piece_code, bl.description AS piece_name, w.work_order_type, w.title, w.description, w.status, w.priority, w.planned_start, w.planned_end, w.estimated_hours, COALESCE(SUM(t.hours), 0) AS actual_hours, COUNT(DISTINCT s.id) AS steps, COUNT(DISTINCT d.id) AS documents FROM prod_work_orders w LEFT JOIN proj_projects p ON p.id = w.project_id LEFT JOIN sell_service_orders so ON so.id = w.service_order_id LEFT JOIN prod_bom_lines bl ON bl.id = w.bom_line_id LEFT JOIN prod_time_logs t ON t.work_order_id = w.id LEFT JOIN prod_work_order_steps s ON s.work_order_id = w.id LEFT JOIN prod_work_order_documents d ON d.work_order_id = w.id GROUP BY w.id, p.project_code, p.name, so.order_code, bl.line_code, bl.description ORDER BY w.created_at DESC")
+            orders = cursor.fetchall()
+            cursor.execute("SELECT id, project_code, name FROM proj_projects ORDER BY project_code")
+            projects = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"work_orders": orders, "projects": projects}
+
+
+@app.post("/production/work-orders", status_code=status.HTTP_201_CREATED)
+def create_production_work_order(payload: WorkOrderRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        connection.begin()
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("INSERT INTO prod_work_orders (wo_code, project_id, service_order_id, bom_line_id, work_order_type, title, description, status, priority, planned_start, planned_end, estimated_hours, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (payload.wo_code, payload.project_id, payload.service_order_id, payload.bom_line_id, payload.work_order_type, payload.title, payload.description or None, payload.status, payload.priority, payload.planned_start, payload.planned_end, payload.estimated_hours, user["id"]))
+                work_order_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El código de OT ya existe") from error
+            for step in payload.steps:
+                cursor.execute("INSERT INTO prod_work_order_steps (work_order_id, sequence_no, process_code, process_name, station, estimated_hours) VALUES (%s, %s, %s, %s, %s, %s)", (work_order_id, step.sequence_no, step.process_code, step.process_name, step.station or None, step.estimated_hours))
+        connection.commit()
+    except HTTPException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+    return {"id": work_order_id, "wo_code": payload.wo_code}
+
+
+@app.get("/production/work-orders/{work_order_id}")
+def production_work_order_detail(work_order_id: int, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT w.*, p.project_code, p.name AS project_name FROM prod_work_orders w LEFT JOIN proj_projects p ON p.id = w.project_id WHERE w.id = %s", (work_order_id,))
+            work_order = cursor.fetchone()
+            if not work_order:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OT no encontrada")
+            cursor.execute("SELECT id, sequence_no, process_code, process_name, station, estimated_hours, status FROM prod_work_order_steps WHERE work_order_id = %s ORDER BY sequence_no", (work_order_id,))
+            steps = cursor.fetchall()
+            cursor.execute("SELECT id, document_name, file_id, file_name, file_type, version, is_current, notes, created_at FROM prod_work_order_documents WHERE work_order_id = %s ORDER BY created_at DESC", (work_order_id,))
+            documents = cursor.fetchall()
+            cursor.execute("SELECT id, step_id, operator_name, station, started_at, ended_at, hours, notes FROM prod_time_logs WHERE work_order_id = %s ORDER BY started_at DESC", (work_order_id,))
+            time_logs = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"work_order": work_order, "steps": steps, "documents": documents, "time_logs": time_logs}
+
+
+@app.post("/production/work-orders/{work_order_id}/documents", status_code=status.HTTP_201_CREATED)
+def create_work_order_document(work_order_id: int, payload: WorkOrderDocumentRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM prod_work_orders WHERE id = %s", (work_order_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="OT no encontrada")
+            if payload.is_current:
+                cursor.execute("UPDATE prod_work_order_documents SET is_current = 0 WHERE work_order_id = %s AND document_name = %s", (work_order_id, payload.document_name))
+            cursor.execute("INSERT INTO prod_work_order_documents (work_order_id, document_name, file_name, file_type, version, is_current, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (work_order_id, payload.document_name, payload.file_name, payload.file_type, payload.version, payload.is_current, payload.notes or None, user["id"]))
+            document_id = cursor.lastrowid
+    finally:
+        connection.close()
+    return {"id": document_id, "version": payload.version}
+
+
+@app.post("/production/time-logs", status_code=status.HTTP_201_CREATED)
+def create_production_time_log(payload: TimeLogRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    hours = payload.hours
+    if payload.ended_at and hours <= 0:
+        hours = Decimal(str((payload.ended_at - payload.started_at).total_seconds() / 3600))
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM prod_work_order_steps WHERE id = %s AND work_order_id = %s", (payload.step_id, payload.work_order_id))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Paso de hoja de ruta no encontrado")
+            cursor.execute("INSERT INTO prod_time_logs (work_order_id, step_id, operator_name, station, started_at, ended_at, hours, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)", (payload.work_order_id, payload.step_id, payload.operator_name, payload.station or None, payload.started_at, payload.ended_at, hours, payload.notes or None, user["id"]))
+            log_id = cursor.lastrowid
+            cursor.execute("UPDATE prod_work_order_steps SET status = %s WHERE id = %s", ("completed" if payload.ended_at else "in_progress", payload.step_id))
+    finally:
+        connection.close()
+    return {"id": log_id, "hours": hours}
+
+
+@app.get("/production/boms")
+def production_boms(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT b.id, b.project_id, p.project_code, p.name AS project_name, b.bom_code, b.version, b.status, b.notes, COUNT(l.id) AS line_count, COUNT(DISTINCT CASE WHEN l.line_kind = 'piece' THEN l.id END) AS piece_count, COUNT(DISTINCT CASE WHEN l.line_kind = 'element' THEN l.id END) AS element_count, COALESCE(SUM(CASE WHEN l.line_kind = 'element' THEN l.quantity * l.estimated_unit_cost ELSE 0 END), 0) AS estimated_cost FROM prod_boms b JOIN proj_projects p ON p.id = b.project_id LEFT JOIN prod_bom_lines l ON l.bom_id = b.id GROUP BY b.id, p.project_code, p.name ORDER BY p.project_code, b.created_at DESC")
+            boms = cursor.fetchall()
+            cursor.execute("SELECT l.id, l.bom_id, l.parent_line_id, l.line_code, l.line_kind, l.line_type, l.material_id, l.description, l.quantity, l.unit, l.estimated_unit_cost, l.cost_source, l.quotation_id, q.quote_code, qs.name AS quote_supplier, i.item_code, i.name AS item_name, i.current_stock, i.in_transit_stock FROM prod_bom_lines l LEFT JOIN inv_materials i ON i.id = l.material_id LEFT JOIN buy_purchase_quotations q ON q.id = l.quotation_id LEFT JOIN buy_suppliers qs ON qs.id = q.supplier_id ORDER BY l.bom_id, COALESCE(l.parent_line_id, 0), l.line_kind DESC, l.id")
+            lines_by_bom = {}
+            for line in cursor.fetchall():
+                lines_by_bom.setdefault(line["bom_id"], []).append(line)
+            for bom in boms:
+                bom["line_items"] = lines_by_bom.get(bom["id"], [])
+                requirements = {}
+                for line in bom["line_items"]:
+                    if line["line_kind"] == "element" and line["material_id"]:
+                        requirements[line["material_id"]] = requirements.get(line["material_id"], 0) + line["quantity"]
+                alerts = 0
+                for line in bom["line_items"]:
+                    required = requirements.get(line["material_id"], 0) if line["material_id"] else 0
+                    warehouse = line["current_stock"] or 0
+                    transit = line["in_transit_stock"] or 0
+                    shortage = max(Decimal("0"), Decimal(str(required)) - Decimal(str(warehouse)) - Decimal(str(transit)))
+                    line["required_total"] = required
+                    line["available_stock"] = warehouse
+                    line["in_transit_stock"] = transit
+                    line["shortage"] = shortage
+                    line["stock_status"] = "available" if shortage <= 0 and required <= warehouse else ("in_transit" if shortage <= 0 else "purchase_required")
+                    if line["stock_status"] == "purchase_required":
+                        alerts += 1
+                bom["stock_alert_count"] = alerts
+            cursor.execute("SELECT id, project_code, name FROM proj_projects ORDER BY project_code")
+            projects = cursor.fetchall()
+            cursor.execute("SELECT id, item_code, name, unit FROM inv_materials WHERE is_active = 1 ORDER BY name")
+            materials = cursor.fetchall()
+            cursor.execute("SELECT id, item_code, name, unit, average_unit_cost FROM inv_materials WHERE is_active = 1 ORDER BY name")
+            average_costs = cursor.fetchall()
+            cursor.execute("SELECT q.id, q.quote_code, s.name AS supplier_name, bi.item_code, r.quantity, q.total_amount, ROUND(q.total_amount / NULLIF(r.quantity, 0), 6) AS unit_cost FROM buy_purchase_quotations q JOIN buy_purchase_requests r ON r.id = q.request_id JOIN buy_items bi ON bi.id = r.item_id JOIN buy_suppliers s ON s.id = q.supplier_id WHERE q.status IN ('approved', 'selected') AND q.total_amount IS NOT NULL AND r.quantity > 0 ORDER BY q.quoted_on DESC, q.id DESC")
+            quotations = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"boms": boms, "projects": projects, "materials": materials, "cost_options": {"average": average_costs, "quotations": quotations}}
+
+
+@app.post("/production/boms", status_code=status.HTTP_201_CREATED)
+def create_production_bom(payload: BomRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM proj_projects WHERE id = %s", (payload.project_id,))
+            project = cursor.fetchone()
+            if not project:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
+            bom_code = payload.bom_code
+            if not bom_code:
+                cursor.execute("SELECT project_code FROM proj_projects WHERE id = %s", (payload.project_id,))
+                project_code = cursor.fetchone()["project_code"]
+                cursor.execute("SELECT COUNT(*) AS total FROM prod_boms WHERE project_id = %s", (payload.project_id,))
+                sequence = cursor.fetchone()["total"] + 1
+                bom_code = f"BOM-{project_code}-{sequence:02d}"
+                while True:
+                    cursor.execute("SELECT id FROM prod_boms WHERE bom_code = %s", (bom_code,))
+                    if not cursor.fetchone():
+                        break
+                    sequence += 1
+                    bom_code = f"BOM-{project_code}-{sequence:02d}"
+            try:
+                cursor.execute("INSERT INTO prod_boms (project_id, bom_code, version, status, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s)", (payload.project_id, bom_code, payload.version, payload.status, payload.notes or None, user["id"]))
+                bom_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El código de BOM ya existe") from error
+    finally:
+        connection.close()
+    return {"id": bom_id, "bom_code": bom_code}
+
+
+@app.post("/production/boms/{bom_id}/lines", status_code=status.HTTP_201_CREATED)
+def create_production_bom_line(bom_id: int, payload: BomLineRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM prod_boms WHERE id = %s", (bom_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="BOM no encontrado")
+            if payload.material_id:
+                cursor.execute("SELECT id FROM inv_materials WHERE id = %s", (payload.material_id,))
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material no encontrado")
+            if payload.parent_line_id:
+                cursor.execute("SELECT id, line_kind FROM prod_bom_lines WHERE id = %s AND bom_id = %s", (payload.parent_line_id, bom_id))
+                parent = cursor.fetchone()
+                if not parent:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="El nodo padre no pertenece al BOM")
+                if payload.line_kind == "element" and parent["line_kind"] != "piece":
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Los elementos deben depender de una pieza")
+            if payload.line_kind == "element" and not payload.material_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cada elemento del BOM debe tener un material de Inventario")
+            cursor.execute("INSERT INTO prod_bom_lines (bom_id, parent_line_id, line_code, line_kind, line_type, material_id, description, quantity, unit, estimated_unit_cost, notes) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (bom_id, payload.parent_line_id, payload.line_code, payload.line_kind, payload.line_type, payload.material_id, payload.description, payload.quantity, payload.unit, payload.estimated_unit_cost, payload.notes or None))
+            line_id = cursor.lastrowid
+    finally:
+        connection.close()
+    return {"id": line_id, "bom_id": bom_id}
+
+
+@app.patch("/production/boms/{bom_id}/lines/{line_id}")
+def update_production_bom_line_quantity(bom_id: int, line_id: int, payload: BomLineQuantityRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, material_id, line_kind, unit, estimated_unit_cost FROM prod_bom_lines WHERE id = %s AND bom_id = %s", (line_id, bom_id))
+            line = cursor.fetchone()
+            if not line:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Elemento del BOM no encontrado")
+            material_id = payload.material_id if payload.material_id is not None else line["material_id"]
+            if line["line_kind"] == "element" and not material_id:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cada elemento del BOM debe tener un material de Inventario")
+            if material_id:
+                cursor.execute("SELECT id, unit FROM inv_materials WHERE id = %s AND is_active = 1", (material_id,))
+                material = cursor.fetchone()
+                if not material:
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material no encontrado")
+                material_unit = material["unit"]
+            else:
+                material_unit = line["unit"]
+            if payload.cost_source == "quotation":
+                if not payload.quotation_id:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Selecciona una cotización aprobada")
+                cursor.execute("SELECT q.id, r.quantity, q.total_amount, q.status FROM buy_purchase_quotations q JOIN buy_purchase_requests r ON r.id = q.request_id WHERE q.id = %s AND q.status IN ('approved', 'selected')", (payload.quotation_id,))
+                quotation = cursor.fetchone()
+                if not quotation or not quotation["total_amount"] or not quotation["quantity"]:
+                    raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="La cotización no está aprobada o no tiene cantidad/precio")
+                unit_cost = Decimal(str(quotation["total_amount"])) / Decimal(str(quotation["quantity"]))
+            else:
+                if material_id:
+                    cursor.execute("SELECT average_unit_cost FROM inv_materials WHERE id = %s", (material_id,))
+                    material = cursor.fetchone()
+                    unit_cost = Decimal(str(material["average_unit_cost"] or 0))
+                else:
+                    unit_cost = Decimal(str(line["estimated_unit_cost"] or 0))
+            cursor.execute("UPDATE prod_bom_lines SET quantity = %s, material_id = %s, unit = %s, cost_source = %s, quotation_id = %s, estimated_unit_cost = %s WHERE id = %s AND bom_id = %s", (payload.quantity, material_id, material_unit, payload.cost_source, payload.quotation_id if payload.cost_source == "quotation" else None, unit_cost, line_id, bom_id))
+    finally:
+        connection.close()
+    return {"id": line_id, "bom_id": bom_id, "quantity": payload.quantity, "unit_cost": unit_cost, "cost_source": payload.cost_source}
+
+
+@app.get("/production/plans")
+def production_plans(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT p.id, p.project_id, pr.project_code, pr.name AS project_name, p.plan_code, p.name, p.bom_id, b.bom_code, p.starts_on, p.ends_on, p.status, p.planned_hours, p.notes FROM prod_plans p JOIN proj_projects pr ON pr.id = p.project_id LEFT JOIN prod_boms b ON b.id = p.bom_id ORDER BY p.starts_on DESC, p.created_at DESC")
+            plans = cursor.fetchall()
+            cursor.execute("SELECT id, project_code, name FROM proj_projects ORDER BY project_code")
+            projects = cursor.fetchall()
+            cursor.execute("SELECT id, project_id, bom_code, version FROM prod_boms WHERE status <> 'obsolete' ORDER BY bom_code")
+            boms = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"plans": plans, "projects": projects, "boms": boms}
+
+
+@app.post("/production/plans", status_code=status.HTTP_201_CREATED)
+def create_production_plan(payload: ProductionPlanRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM proj_projects WHERE id = %s", (payload.project_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Proyecto no encontrado")
+            cursor.execute("INSERT INTO prod_plans (project_id, plan_code, name, bom_id, starts_on, ends_on, status, planned_hours, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (payload.project_id, payload.plan_code, payload.name, payload.bom_id, payload.starts_on, payload.ends_on, payload.status, payload.planned_hours, payload.notes or None, user["id"]))
+            plan_id = cursor.lastrowid
+    finally:
+        connection.close()
+    return {"id": plan_id, "plan_code": payload.plan_code}
+
+
+@app.get("/production/service-orders")
+def production_service_orders(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT o.id, o.order_code, o.description, o.project_type, o.approved_at, o.project_due_date, o.status, c.name AS customer_name, p.id AS project_id, p.project_code, p.name AS project_name, COUNT(w.id) AS work_order_count, COUNT(CASE WHEN w.work_order_type = 'piece' THEN 1 END) AS piece_work_order_count, COUNT(CASE WHEN w.work_order_type = 'assembly' THEN 1 END) AS assembly_work_order_count, COUNT(DISTINCT bl.id) AS bom_piece_count FROM sell_service_orders o JOIN sell_customers c ON c.id = o.customer_id LEFT JOIN proj_projects p ON p.service_order_id = o.id LEFT JOIN prod_work_orders w ON w.service_order_id = o.id LEFT JOIN prod_bom_lines bl ON bl.id = w.bom_line_id AND bl.line_kind = 'piece' WHERE o.status <> 'cancelled' GROUP BY o.id, c.name, p.id, p.project_code, p.name ORDER BY o.approved_at DESC, o.id DESC")
+            orders = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"service_orders": orders, "source": "sales"}
+
+
+@app.get("/production/labor")
+def production_labor(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT e.id, e.project_id, p.project_code, p.name AS project_name, w.worker_code, w.full_name, w.specialty, e.engagement_type, e.start_date, e.end_date, e.status, e.cost_unit, e.rate, COALESCE(e.estimated_hours, 0) AS estimated_hours, e.rate * COALESCE(e.estimated_hours, 0) AS estimated_cost, COALESCE(t.actual_hours, 0) AS actual_hours FROM hr_engagements e JOIN hr_workers w ON w.id = e.worker_id LEFT JOIN proj_projects p ON p.id = e.project_id LEFT JOIN (SELECT w2.project_id, SUM(t2.hours) AS actual_hours FROM prod_work_orders w2 JOIN prod_time_logs t2 ON t2.work_order_id = w2.id GROUP BY w2.project_id) t ON t.project_id = e.project_id WHERE e.project_id IS NOT NULL ORDER BY p.project_code, e.start_date DESC")
+            assignments = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"assignments": assignments}
+
+
+@app.get("/production/reports")
+def production_reports(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    """Production management view: manufacturing cost, labour and lead-time KPIs."""
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT p.id AS project_id, p.project_code, p.name AS project_name,
+                       COALESCE((SELECT COUNT(*) FROM prod_work_orders w WHERE w.project_id = p.id), 0) AS work_orders,
+                       COALESCE((SELECT COUNT(*) FROM prod_work_orders w WHERE w.project_id = p.id AND w.status = 'completed'), 0) AS completed_work_orders,
+                       COALESCE((SELECT SUM(w.estimated_hours) FROM prod_work_orders w WHERE w.project_id = p.id), 0) AS estimated_hours,
+                       COALESCE((SELECT SUM(t.hours) FROM prod_time_logs t JOIN prod_work_orders w ON w.id = t.work_order_id WHERE w.project_id = p.id), 0) AS actual_hours
+                FROM proj_projects p
+                ORDER BY p.project_code
+                """
+            )
+            projects = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT b.project_id, COALESCE(SUM(l.quantity * l.estimated_unit_cost), 0) AS material_cost
+                FROM prod_boms b JOIN prod_bom_lines l ON l.bom_id = b.id
+                WHERE l.line_kind = 'element' AND l.material_id IS NOT NULL
+                GROUP BY b.project_id
+                """
+            )
+            material_costs = {row["project_id"]: row["material_cost"] for row in cursor.fetchall()}
+            cursor.execute(
+                """
+                SELECT e.project_id,
+                       COALESCE(SUM(e.estimated_hours), 0) AS labor_estimated_hours,
+                       COALESCE(SUM(e.rate * COALESCE(e.estimated_hours, 0)), 0) AS labor_cost
+                FROM hr_engagements e
+                WHERE e.project_id IS NOT NULL
+                GROUP BY e.project_id
+                """
+            )
+            labor_costs = {row["project_id"]: row for row in cursor.fetchall()}
+            cursor.execute(
+                """
+                SELECT s.process_code, s.process_name, COUNT(*) AS step_count,
+                       COALESCE(SUM(s.estimated_hours), 0) AS estimated_hours,
+                       COALESCE(SUM(t.actual_hours), 0) AS actual_hours
+                FROM prod_work_order_steps s
+                LEFT JOIN (
+                    SELECT step_id, SUM(hours) AS actual_hours
+                    FROM prod_time_logs GROUP BY step_id
+                ) t ON t.step_id = s.id
+                GROUP BY s.process_code, s.process_name
+                ORDER BY estimated_hours DESC, s.process_name
+                """
+            )
+            processes = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT p.project_code, p.name AS project_name, s.process_code, s.process_name,
+                       COUNT(DISTINCT s.id) AS step_count,
+                       COALESCE(SUM(s.estimated_hours), 0) AS estimated_hours,
+                       COALESCE(SUM(t.hours), 0) AS actual_hours,
+                       COUNT(DISTINCT t.id) AS time_log_count,
+                       GROUP_CONCAT(DISTINCT NULLIF(t.notes, '') SEPARATOR ' · ') AS notes,
+                       GROUP_CONCAT(DISTINCT NULLIF(t.station, '') SEPARATOR ' · ') AS stations
+                FROM prod_work_order_steps s
+                JOIN prod_work_orders w ON w.id = s.work_order_id
+                JOIN proj_projects p ON p.id = w.project_id
+                LEFT JOIN prod_time_logs t ON t.step_id = s.id
+                GROUP BY p.id, p.project_code, p.name, s.process_code, s.process_name
+                ORDER BY s.process_code, p.project_code
+                """
+            )
+            process_projects = cursor.fetchall()
+            cursor.execute(
+                """
+                SELECT COUNT(*) AS shortage_count
+                FROM (
+                    SELECT b.project_id, l.material_id, SUM(l.quantity) AS required_qty
+                    FROM prod_boms b JOIN prod_bom_lines l ON l.bom_id = b.id
+                    WHERE l.line_kind = 'element' AND l.material_id IS NOT NULL
+                    GROUP BY b.project_id, l.material_id
+                ) req
+                JOIN inv_materials i ON i.id = req.material_id
+                WHERE req.required_qty > (i.current_stock + i.in_transit_stock)
+                """
+            )
+            shortage_count = cursor.fetchone()["shortage_count"]
+    finally:
+        connection.close()
+
+    def number(value):
+        return float(value or 0)
+
+    project_rows = []
+    for row in projects:
+        project_id = row["project_id"]
+        estimated_hours = number(row["estimated_hours"])
+        actual_hours = number(row["actual_hours"])
+        labor = labor_costs.get(project_id, {})
+        material_cost = number(material_costs.get(project_id, 0))
+        labor_cost = number(labor.get("labor_cost", 0))
+        project_rows.append({
+            "project_code": row["project_code"], "project_name": row["project_name"],
+            "work_orders": int(row["work_orders"] or 0), "completed_work_orders": int(row["completed_work_orders"] or 0),
+            "estimated_hours": estimated_hours, "actual_hours": actual_hours,
+            "hours_variance": actual_hours - estimated_hours,
+            "material_cost": material_cost, "labor_cost": labor_cost,
+            "manufacturing_cost": material_cost + labor_cost,
+            "progress_pct": round((int(row["completed_work_orders"] or 0) / int(row["work_orders"] or 1)) * 100, 1),
+        })
+    total = lambda key: round(sum(row[key] for row in project_rows), 2)
+    estimated_hours = total("estimated_hours")
+    actual_hours = total("actual_hours")
+    labor_estimated_hours = round(sum(number(row.get("labor_estimated_hours", 0)) for row in labor_costs.values()), 2)
+    material_cost = total("material_cost")
+    labor_cost = total("labor_cost")
+    process_analysis = []
+    grouped_processes = {}
+    for row in process_projects:
+        grouped_processes.setdefault(row["process_code"], {"process_code": row["process_code"], "process_name": row["process_name"], "projects": []})["projects"].append({
+            "project_code": row["project_code"], "project_name": row["project_name"], "estimated_hours": number(row["estimated_hours"]), "actual_hours": number(row["actual_hours"]), "hours_variance": number(row["actual_hours"]) - number(row["estimated_hours"]), "time_log_count": int(row["time_log_count"] or 0), "notes": row["notes"] or "", "stations": row["stations"] or ""
+        })
+    for process in grouped_processes.values():
+        observed = [item["actual_hours"] for item in process["projects"] if item["actual_hours"] > 0]
+        average_actual = sum(observed) / len(observed) if observed else 0
+        total_actual = sum(item["actual_hours"] for item in process["projects"])
+        for item in process["projects"]:
+            item["average_actual_hours"] = round(average_actual, 2)
+            item["deviation_vs_average"] = round(item["actual_hours"] - average_actual, 2)
+            if not item["time_log_count"]:
+                item["diagnostic"] = "Sin horas registradas; no permite concluir eficiencia."
+            elif item["actual_hours"] > item["estimated_hours"]:
+                item["diagnostic"] = "Sobre la estimación; revisar esperas, retrabajos, material y disponibilidad de estación."
+            elif item["actual_hours"] < average_actual:
+                item["diagnostic"] = "Por debajo del promedio; validar si hubo menor alcance, mejor método o registro incompleto."
+            else:
+                item["diagnostic"] = "Dentro del comportamiento observado."
+        process["average_actual_hours"] = round(average_actual, 2)
+        process["total_actual_hours"] = round(total_actual, 2)
+        process["demand_rank"] = 0
+        process_analysis.append(process)
+    process_analysis.sort(key=lambda row: row["total_actual_hours"], reverse=True)
+    for index, process in enumerate(process_analysis, 1):
+        process["demand_rank"] = index
+    return {
+        "summary": {
+            "project_count": len(project_rows), "work_order_count": sum(row["work_orders"] for row in project_rows),
+            "completed_work_orders": sum(row["completed_work_orders"] for row in project_rows),
+            "estimated_hours": estimated_hours, "actual_hours": actual_hours,
+            "hours_variance": round(actual_hours - estimated_hours, 2),
+            "hours_efficiency_pct": round((estimated_hours / actual_hours) * 100, 1) if actual_hours else 0,
+            "material_cost": material_cost, "labor_cost": labor_cost,
+            "manufacturing_cost": round(material_cost + labor_cost, 2),
+            "labor_estimated_hours": labor_estimated_hours, "shortage_count": int(shortage_count or 0),
+        },
+        "projects": project_rows,
+        "processes": [{"process_code": row["process_code"], "process_name": row["process_name"], "step_count": int(row["step_count"] or 0), "estimated_hours": number(row["estimated_hours"]), "actual_hours": number(row["actual_hours"]), "hours_variance": number(row["actual_hours"]) - number(row["estimated_hours"])} for row in processes],
+        "process_analysis": process_analysis,
+        "cost_breakdown": [{"key": "material", "label": "Materiales y consumibles", "value": material_cost}, {"key": "labor", "label": "Mano de obra", "value": labor_cost}],
+    }
+
+
+@app.get("/inventory/materials")
+def inventory_materials(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, item_code, name, category, unit, minimum_stock, current_stock, in_transit_stock, average_unit_cost, (current_stock <= minimum_stock) AS reorder_alert, is_active FROM inv_materials WHERE is_active = 1 ORDER BY reorder_alert DESC, name")
+            materials = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"materials": materials}
+
+
+@app.post("/inventory/materials", status_code=status.HTTP_201_CREATED)
+def create_inventory_material(payload: InventoryMaterialRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("INSERT INTO inv_materials (item_code, name, category, unit, minimum_stock, created_by) VALUES (%s, %s, %s, %s, %s, %s)", (payload.item_code, payload.name, payload.category, payload.unit, payload.minimum_stock, user["id"]))
+                material_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El código de material ya existe") from error
+    finally:
+        connection.close()
+    return {"id": material_id, "item_code": payload.item_code}
+
+
+@app.get("/inventory/stock-movements")
+def inventory_stock_movements(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT m.id, m.movement_date, m.movement_type, m.quantity, m.reference, m.work_order_id, i.item_code, i.name AS material_name, i.unit FROM inv_stock_movements m JOIN inv_materials i ON i.id = m.material_id ORDER BY m.movement_date DESC, m.id DESC LIMIT 100")
+            movements = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"movements": movements}
+
+
+@app.post("/inventory/stock-movements", status_code=status.HTTP_201_CREATED)
+def create_inventory_stock_movement(payload: StockMovementRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    sign = 1 if payload.movement_type in {"receipt", "return", "remnant", "adjustment"} else -1
+    connection = connect()
+    try:
+        connection.begin()
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM inv_materials WHERE id = %s AND is_active = 1", (payload.material_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material no encontrado")
+            cursor.execute("INSERT INTO inv_stock_movements (material_id, movement_type, quantity, reference, work_order_id, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s)", (payload.material_id, payload.movement_type, payload.quantity, payload.reference or None, payload.work_order_id, payload.notes or None, user["id"]))
+            movement_id = cursor.lastrowid
+            cursor.execute("UPDATE inv_materials SET current_stock = current_stock + %s WHERE id = %s", (payload.quantity * sign, payload.material_id))
+        connection.commit()
+    except HTTPException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+    return {"id": movement_id, "material_id": payload.material_id, "delta": payload.quantity * sign}
+
+
+@app.get("/inventory/remnants")
+def inventory_remnants(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT r.id, r.remnant_code, r.description, r.dimensions, r.quantity, r.unit, r.status, r.source_work_order_id, i.item_code, i.name AS material_name FROM inv_remnants r JOIN inv_materials i ON i.id = r.material_id ORDER BY r.created_at DESC")
+            remnants = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"remnants": remnants}
+
+
+@app.post("/inventory/remnants", status_code=status.HTTP_201_CREATED)
+def create_inventory_remnant(payload: RemnantRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_operations(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM inv_materials WHERE id = %s", (payload.material_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Material no encontrado")
+            try:
+                cursor.execute("INSERT INTO inv_remnants (remnant_code, material_id, description, dimensions, quantity, unit, status, source_work_order_id, notes, created_by) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)", (payload.remnant_code, payload.material_id, payload.description, payload.dimensions or None, payload.quantity, payload.unit, payload.status, payload.source_work_order_id, payload.notes or None, user["id"]))
+                remnant_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El código de retazo ya existe") from error
+    finally:
+        connection.close()
+    return {"id": remnant_id, "remnant_code": payload.remnant_code}
 
 
 @app.get("/sales/customers")
@@ -3080,6 +4458,345 @@ def accounts_summary(token: str | None = Cookie(default=None, alias=SESSION_COOK
     return {"companies": companies, "accounts": accounts, "posted_entries": entries, "company_list": company_rows}
 
 
+@app.get("/accounts/sales-invoices")
+def accounts_sales_invoices(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    """Read the sales documents emitted by Ventas; Finance never creates a duplicate document."""
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT q.id, q.quote_code AS document_code, COALESCE(o.approved_at, DATE(q.created_at)) AS issue_date, c.name AS customer_name, o.order_code, COALESCE(SUM(i.subtotal), 0) AS subtotal, COALESCE(SUM(i.subtotal), 0) * 0.18 AS tax_amount, COALESCE(SUM(i.subtotal), 0) * 1.18 AS total_amount, CASE WHEN o.status IN ('approved', 'in_progress', 'completed') THEN 'issued' ELSE 'draft' END AS status FROM sell_quotations q JOIN sell_customers c ON c.id = q.customer_id LEFT JOIN sell_service_orders o ON o.id = q.service_order_id LEFT JOIN sell_quotation_items i ON i.quotation_id = q.id GROUP BY q.id, q.quote_code, q.created_at, o.approved_at, c.name, o.order_code, o.status ORDER BY issue_date DESC, q.id DESC")
+            invoices = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"invoices": invoices, "source": "sales"}
+
+
+@app.get("/accounts/purchase-invoices")
+def accounts_purchase_invoices(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    """Read the purchase invoices issued in Compras, preserving their original identifiers."""
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT i.id, i.invoice_code, i.invoice_date, i.due_date, i.status, i.currency, i.subtotal, i.tax_amount, i.total_amount, o.order_code, s.name AS supplier_name FROM buy_purchase_invoices i JOIN buy_purchase_orders o ON o.id = i.order_id JOIN buy_purchase_quotations q ON q.id = o.quotation_id JOIN buy_suppliers s ON s.id = q.supplier_id ORDER BY i.invoice_date DESC, i.id DESC")
+            invoices = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"invoices": invoices, "source": "purchases"}
+
+
+@app.get("/accounts/purchase-control")
+def accounts_purchase_control(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    """Accounting view over the purchase documents created in Compras.
+
+    This endpoint deliberately reads the purchasing source tables instead of creating
+    a second invoice register. It provides the operational base for a Peruvian MYPE
+    accountant: purchase register, IGV credit, payable aging and supplier concentration.
+    """
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            invoice_from = "FROM buy_purchase_invoices i JOIN buy_purchase_orders o ON o.id = i.order_id JOIN buy_purchase_quotations q ON q.id = o.quotation_id JOIN buy_purchase_requests r ON r.id = q.request_id JOIN buy_suppliers s ON s.id = q.supplier_id"
+            cursor.execute(
+                f"SELECT COUNT(i.id) AS documents, COALESCE(SUM(i.subtotal), 0) AS subtotal, COALESCE(SUM(i.tax_amount), 0) AS igv, COALESCE(SUM(i.total_amount), 0) AS total, COALESCE(SUM(CASE WHEN i.status IN ('received', 'validated') THEN i.total_amount ELSE 0 END), 0) AS pending, COALESCE(SUM(CASE WHEN i.status IN ('received', 'validated') AND i.due_date IS NOT NULL AND i.due_date < CURDATE() THEN i.total_amount ELSE 0 END), 0) AS overdue, COALESCE(SUM(CASE WHEN i.status IN ('received', 'validated') AND i.due_date IS NOT NULL AND i.due_date BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN i.total_amount ELSE 0 END), 0) AS due_30, COUNT(DISTINCT s.id) AS suppliers {invoice_from} WHERE i.status <> 'cancelled'"
+            )
+            totals = cursor.fetchone()
+            cursor.execute(
+                f"SELECT i.id, i.invoice_code, i.invoice_date, i.due_date, i.status, i.currency, i.subtotal, i.tax_amount, i.total_amount, o.order_code, r.request_code, s.name AS supplier_name, s.document_number AS supplier_document, q.quote_code {invoice_from} WHERE i.status <> 'cancelled' ORDER BY i.invoice_date DESC, i.id DESC"
+            )
+            invoices = cursor.fetchall()
+            cursor.execute(
+                f"SELECT s.name AS supplier_name, s.document_number AS supplier_document, COUNT(i.id) AS documents, COALESCE(SUM(i.subtotal), 0) AS subtotal, COALESCE(SUM(i.tax_amount), 0) AS igv, COALESCE(SUM(i.total_amount), 0) AS total {invoice_from} WHERE i.status <> 'cancelled' GROUP BY s.id, s.name, s.document_number ORDER BY total DESC"
+            )
+            suppliers = cursor.fetchall()
+            cursor.execute(
+                f"SELECT DATE_FORMAT(i.invoice_date, '%%Y-%%m') AS period, COUNT(i.id) AS documents, COALESCE(SUM(i.subtotal), 0) AS subtotal, COALESCE(SUM(i.tax_amount), 0) AS igv, COALESCE(SUM(i.total_amount), 0) AS total {invoice_from} WHERE i.status <> 'cancelled' GROUP BY period ORDER BY period"
+            )
+            monthly = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"totals": totals, "invoices": invoices, "suppliers": suppliers, "monthly": monthly, "basis": "Comprobantes registrados en Compras; IGV referencial al 18% sujeto a validación tributaria."}
+
+
+@app.get("/sales/invoices")
+def sales_invoices(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_sales(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT q.id, q.quote_code AS document_code, COALESCE(o.approved_at, DATE(q.created_at)) AS issue_date, c.name AS customer_name, o.order_code, COALESCE(SUM(i.subtotal), 0) AS subtotal, COALESCE(SUM(i.subtotal), 0) * 0.18 AS tax_amount, COALESCE(SUM(i.subtotal), 0) * 1.18 AS total_amount, CASE WHEN o.status IN ('approved', 'in_progress', 'completed') THEN 'issued' ELSE 'draft' END AS status FROM sell_quotations q JOIN sell_customers c ON c.id = q.customer_id LEFT JOIN sell_service_orders o ON o.id = q.service_order_id LEFT JOIN sell_quotation_items i ON i.quotation_id = q.id GROUP BY q.id, q.quote_code, q.created_at, o.approved_at, c.name, o.order_code, o.status ORDER BY issue_date DESC, q.id DESC")
+            invoices = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"invoices": invoices, "source": "sales"}
+
+
+@app.get("/accounts/banks")
+def accounts_banks(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT b.id, b.name, b.country, b.website, b.api_provider, b.integration_status, b.notes, COUNT(a.id) AS account_count FROM acc_banks b LEFT JOIN acc_cash_accounts a ON a.bank_id = b.id AND a.is_active = 1 WHERE b.is_active = 1 GROUP BY b.id ORDER BY b.name")
+            banks = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"banks": banks}
+
+
+@app.post("/accounts/banks", status_code=status.HTTP_201_CREATED)
+def create_bank(payload: BankRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            try:
+                cursor.execute("INSERT INTO acc_banks (name, country, website, api_provider, integration_status, notes) VALUES (%s, %s, %s, %s, %s, %s)", (payload.name, payload.country, payload.website or None, payload.api_provider or None, payload.integration_status, payload.notes or None))
+                bank_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El banco ya está registrado para ese país") from error
+    finally:
+        connection.close()
+    return {"id": bank_id, "name": payload.name}
+
+
+@app.get("/accounts/cash-accounts")
+def accounts_cash_accounts(company_id: int, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT a.id, a.company_id, a.bank_id, a.code, a.name, a.account_type, a.bank_name, a.account_number_masked, a.opening_balance, b.name AS institution_name FROM acc_cash_accounts a LEFT JOIN acc_banks b ON b.id = a.bank_id WHERE a.company_id = %s AND a.is_active = 1 ORDER BY a.name", (company_id,))
+            accounts = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"accounts": accounts}
+
+
+@app.patch("/accounts/banks/{bank_id}")
+def update_bank(bank_id: int, payload: BankRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM acc_banks WHERE id = %s AND is_active = 1", (bank_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banco no encontrado")
+            try:
+                cursor.execute("UPDATE acc_banks SET name = %s, country = %s, website = %s, api_provider = %s, integration_status = %s, notes = %s WHERE id = %s", (payload.name, payload.country, payload.website or None, payload.api_provider or None, payload.integration_status, payload.notes or None, bank_id))
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El banco ya está registrado para ese país") from error
+    finally:
+        connection.close()
+    return {"id": bank_id, "name": payload.name, "website": payload.website}
+
+
+@app.post("/accounts/cash-accounts", status_code=status.HTTP_201_CREATED)
+def create_cash_account(payload: CashAccountRequest, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    user = require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id FROM acc_companies WHERE id = %s AND is_active = 1", (payload.company_id,))
+            if not cursor.fetchone():
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found")
+            if payload.bank_id:
+                cursor.execute("SELECT id FROM acc_banks WHERE id = %s AND is_active = 1", (payload.bank_id,))
+                if not cursor.fetchone():
+                    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bank not found")
+            try:
+                cursor.execute("INSERT INTO acc_cash_accounts (company_id, bank_id, code, name, account_type, bank_name, account_number_masked, opening_balance) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)", (payload.company_id, payload.bank_id, payload.code, payload.name, payload.account_type, payload.bank_name or None, payload.account_number_masked or None, payload.opening_balance))
+                account_id = cursor.lastrowid
+            except pymysql.err.IntegrityError as error:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="El código ya existe en esta compañía") from error
+    finally:
+        connection.close()
+    return {"id": account_id, "code": payload.code, "created_by": user["id"]}
+
+
+@app.get("/accounts/finance-overview")
+def finance_overview(company_id: int | None = None, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            if not company_id:
+                cursor.execute("SELECT id FROM acc_companies WHERE is_active = 1 ORDER BY id LIMIT 1")
+                company = cursor.fetchone()
+                company_id = company["id"] if company else None
+            if not company_id:
+                return {"company_id": None, "kpis": {}, "monthly": [], "recent": [], "cash_accounts": []}
+            cursor.execute("SELECT COALESCE(SUM(CASE WHEN direction = 'inflow' AND status = 'cleared' THEN amount ELSE 0 END), 0) AS cash_in, COALESCE(SUM(CASE WHEN direction = 'outflow' AND status = 'cleared' THEN amount ELSE 0 END), 0) AS cash_out, COALESCE(SUM(CASE WHEN direction = 'inflow' AND status <> 'cleared' THEN amount ELSE 0 END), 0) AS receivable, COALESCE(SUM(CASE WHEN direction = 'outflow' AND status <> 'cleared' THEN amount ELSE 0 END), 0) AS payable, COUNT(*) AS movement_count FROM acc_cash_movements WHERE company_id = %s", (company_id,))
+            totals = cursor.fetchone()
+            cursor.execute("SELECT DATE_FORMAT(movement_date, '%%Y-%%m') AS month, COALESCE(SUM(CASE WHEN direction = 'inflow' THEN amount ELSE 0 END), 0) AS inflows, COALESCE(SUM(CASE WHEN direction = 'outflow' THEN amount ELSE 0 END), 0) AS outflows FROM acc_cash_movements WHERE company_id = %s GROUP BY DATE_FORMAT(movement_date, '%%Y-%%m') ORDER BY month", (company_id,))
+            monthly = cursor.fetchall()
+            cursor.execute("SELECT m.id, m.movement_date, m.direction, m.category, m.description, m.reference, m.amount, m.status, c.name AS cash_account_name FROM acc_cash_movements m JOIN acc_cash_accounts c ON c.id = m.cash_account_id WHERE m.company_id = %s ORDER BY m.movement_date DESC, m.id DESC LIMIT 12", (company_id,))
+            recent = cursor.fetchall()
+            cursor.execute("SELECT id, code, name, account_type, bank_name, account_number_masked, opening_balance FROM acc_cash_accounts WHERE company_id = %s AND is_active = 1 ORDER BY name", (company_id,))
+            cash_accounts = cursor.fetchall()
+    finally:
+        connection.close()
+    totals["net_cash"] = totals["cash_in"] - totals["cash_out"]
+    totals["cash_balance"] = sum((row["opening_balance"] for row in cash_accounts), Decimal("0")) + totals["net_cash"]
+    return {"company_id": company_id, "kpis": totals, "monthly": monthly, "recent": recent, "cash_accounts": cash_accounts}
+
+
+@app.get("/accounts/statements")
+def account_statements(company_id: int, status_filter: str | None = None, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            conditions = ["m.company_id = %s"]
+            params: list = [company_id]
+            if status_filter:
+                conditions.append("m.status = %s")
+                params.append(status_filter)
+            cursor.execute(f"SELECT m.id, m.movement_date, m.direction, m.category, m.description, m.reference, m.amount, m.status, m.source_type, m.project_id, c.name AS cash_account_name, c.account_number_masked FROM acc_cash_movements m JOIN acc_cash_accounts c ON c.id = m.cash_account_id WHERE {' AND '.join(conditions)} ORDER BY m.movement_date DESC, m.id DESC", params)
+            movements = cursor.fetchall()
+            cursor.execute("SELECT COALESCE(SUM(CASE WHEN direction = 'inflow' THEN amount ELSE 0 END), 0) AS inflows, COALESCE(SUM(CASE WHEN direction = 'outflow' THEN amount ELSE 0 END), 0) AS outflows, COUNT(*) AS movements FROM acc_cash_movements WHERE company_id = %s", (company_id,))
+            totals = cursor.fetchone()
+    finally:
+        connection.close()
+    totals["net"] = totals["inflows"] - totals["outflows"]
+    return {"company_id": company_id, "totals": totals, "movements": movements}
+
+
+def financial_period_bounds(statement: str, period: str | None) -> tuple[date | None, date | None, str]:
+    if not period:
+        period = str(date.today().year) if statement == "balance" else f"{date.today().year}-Q{((date.today().month - 1) // 3) + 1}"
+    try:
+        if statement == "balance":
+            start = date(int(period), 1, 1)
+            return start, date(int(period), 12, 31), period
+        year_text, quarter_text = period.split("-Q")
+        year, quarter = int(year_text), int(quarter_text)
+        if quarter not in {1, 2, 3, 4}:
+            raise ValueError
+        start_month = ((quarter - 1) * 3) + 1
+        start = date(year, start_month, 1)
+        end = date(year + (1 if quarter == 4 else 0), 1 if quarter == 4 else start_month + 3, 1)
+        return start, end.fromordinal(end.toordinal() - 1), period
+    except (ValueError, TypeError):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Periodo financiero inválido")
+
+
+@app.get("/accounts/financial-statements")
+def financial_statements(company_id: int | None = None, statement: str = "balance", period: str | None = None, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    """Return formal posted-ledger statements plus an operational preliminary view.
+
+    The independent ERP may still be operating before every sale, purchase and payroll
+    transaction has a journal entry. In that case the UI can show a clearly labelled
+    cash/operational view instead of presenting zeros as if the company had no activity.
+    """
+    require_accounts(token)
+    if statement not in {"balance", "income-statement"}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Tipo de estado financiero inválido")
+    period_start, period_end, period_label = financial_period_bounds(statement, period)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            if not company_id:
+                cursor.execute("SELECT id FROM acc_companies WHERE is_active = 1 ORDER BY id LIMIT 1")
+                company = cursor.fetchone()
+                company_id = company["id"] if company else None
+            if not company_id:
+                return {"company_id": None, "formal": {"assets": [], "liabilities": [], "equity": [], "income": [], "expenses": [], "totals": {}}, "operational": {}}
+            cursor.execute("SELECT a.code, a.name, a.root_type, COALESCE(SUM(l.debit), 0) AS debit, COALESCE(SUM(l.credit), 0) AS credit FROM acc_accounts a LEFT JOIN acc_journal_lines l ON l.account_id = a.id LEFT JOIN acc_journal_entries e ON e.id = l.journal_entry_id AND e.company_id = %s AND e.status = 'posted' AND e.posting_date BETWEEN %s AND %s WHERE a.company_id = %s AND a.is_active = 1 AND a.is_group = 0 GROUP BY a.id, a.code, a.name, a.root_type ORDER BY a.code", (company_id, period_start, period_end, company_id))
+            account_rows = cursor.fetchall()
+            cursor.execute("SELECT COALESCE(SUM(CASE WHEN direction = 'inflow' AND status = 'cleared' THEN amount ELSE 0 END), 0) AS cash_in, COALESCE(SUM(CASE WHEN direction = 'outflow' AND status = 'cleared' THEN amount ELSE 0 END), 0) AS cash_out, COALESCE(SUM(CASE WHEN direction = 'inflow' AND status <> 'cleared' THEN amount ELSE 0 END), 0) AS receivable, COALESCE(SUM(CASE WHEN direction = 'outflow' AND status <> 'cleared' THEN amount ELSE 0 END), 0) AS payable, COALESCE(SUM(CASE WHEN direction = 'inflow' AND category = 'sales' THEN amount ELSE 0 END), 0) AS sales, COALESCE(SUM(CASE WHEN direction = 'outflow' AND category = 'purchases' THEN amount ELSE 0 END), 0) AS purchases, COALESCE(SUM(CASE WHEN direction = 'outflow' AND category = 'payroll' THEN amount ELSE 0 END), 0) AS payroll, COALESCE(SUM(CASE WHEN direction = 'outflow' AND category NOT IN ('purchases', 'payroll') THEN amount ELSE 0 END), 0) AS other_expenses FROM acc_cash_movements WHERE company_id = %s AND movement_date BETWEEN %s AND %s", (company_id, period_start, period_end))
+            operational = cursor.fetchone()
+            cursor.execute("SELECT COALESCE(SUM(opening_balance), 0) AS opening_balance FROM acc_cash_accounts WHERE company_id = %s AND is_active = 1", (company_id,))
+            operational["opening_balance"] = cursor.fetchone()["opening_balance"]
+            cursor.execute("SELECT COUNT(*) AS posted_entries FROM acc_journal_entries WHERE company_id = %s AND status = 'posted' AND posting_date BETWEEN %s AND %s", (company_id, period_start, period_end))
+            operational["posted_entries"] = cursor.fetchone()["posted_entries"]
+    finally:
+        connection.close()
+    formal = {"assets": [], "liabilities": [], "equity": [], "income": [], "expenses": [], "totals": {"assets": Decimal("0"), "liabilities": Decimal("0"), "equity": Decimal("0"), "income": Decimal("0"), "expenses": Decimal("0"), "net_result": Decimal("0")}}
+    for row in account_rows:
+        root = row["root_type"]
+        amount = (row["debit"] - row["credit"]) if root in {"Asset", "Expense"} else (row["credit"] - row["debit"])
+        if amount == 0:
+            continue
+        target = {"Asset": "assets", "Liability": "liabilities", "Equity": "equity", "Income": "income", "Expense": "expenses"}.get(root)
+        if target:
+            formal[target].append({"code": row["code"], "name": row["name"], "amount": amount})
+            formal["totals"][target] += amount
+    formal["totals"]["net_result"] = formal["totals"]["income"] - formal["totals"]["expenses"]
+    operational["cash_balance"] = operational["opening_balance"] + operational["cash_in"] - operational["cash_out"]
+    operational["working_capital"] = operational["cash_balance"] + operational["receivable"] - operational["payable"]
+    operational["net_result"] = operational["sales"] - operational["purchases"] - operational["payroll"] - operational["other_expenses"]
+    return {"company_id": company_id, "period": period_label, "period_start": period_start, "period_end": period_end, "formal": formal, "operational": operational}
+
+
+@app.get("/accounts/financial-statements/pdf")
+def financial_statements_pdf(company_id: int | None = None, statement: str = "balance", period: str | None = None, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    data = financial_statements(company_id, statement, period, token)
+    company_name = "MetalMecánica Andina S.A.C."
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT name, tax_id FROM acc_companies WHERE id = %s", (data["company_id"],))
+            company = cursor.fetchone()
+            if company:
+                company_name = f"{company['name']} · RUC {company['tax_id']}"
+    finally:
+        connection.close()
+    formal = data["formal"]
+    op = data["operational"]
+    is_balance = statement == "balance"
+    title = "Balance" if is_balance else "Estado de Resultados"
+    filename = f"{title.lower().replace(' ', '-')}-{data['period']}.pdf"
+    buffer = io.BytesIO()
+    document = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=16 * mm, leftMargin=16 * mm, topMargin=16 * mm, bottomMargin=16 * mm)
+    styles = getSampleStyleSheet()
+    story = [Paragraph(company_name, styles["Title"]), Paragraph(f"{title} · Periodo {data['period']}", styles["Heading2"]), Spacer(1, 5 * mm)]
+    story.append(Paragraph("Base contable publicada" if (formal["totals"]["assets"] or formal["totals"]["income"]) else "Vista gerencial preliminar: aún no hay asientos contables publicados para este periodo.", styles["Normal"]))
+    story.append(Spacer(1, 4 * mm))
+    if is_balance:
+        rows = [["Concepto", "Importe (S/)"]]
+        if formal["totals"]["assets"] or formal["totals"]["liabilities"] or formal["totals"]["equity"]:
+            rows += [["Activos", f"{formal['totals']['assets']:,.2f}"], ["Pasivos", f"{formal['totals']['liabilities']:,.2f}"], ["Patrimonio", f"{formal['totals']['equity']:,.2f}"], ["Resultado del periodo", f"{formal['totals']['net_result']:,.2f}"]]
+        else:
+            rows += [["Caja y bancos", f"{op['cash_balance']:,.2f}"], ["Cuentas por cobrar", f"{op['receivable']:,.2f}"], ["Activos preliminares", f"{op['cash_balance'] + op['receivable']:,.2f}"], ["Cuentas por pagar", f"{op['payable']:,.2f}"], ["Patrimonio provisional", f"{op['cash_balance'] + op['receivable'] - op['payable']:,.2f}"]]
+    else:
+        rows = [["Concepto", "Importe (S/)"]]
+        if formal["totals"]["income"] or formal["totals"]["expenses"]:
+            rows += [["Ingresos", f"{formal['totals']['income']:,.2f}"], ["Costos y gastos", f"{formal['totals']['expenses']:,.2f}"], ["Resultado del periodo", f"{formal['totals']['net_result']:,.2f}"]]
+        else:
+            rows += [["Ingresos operativos", f"{op['sales']:,.2f}"], ["Compras y costos", f"{op['purchases']:,.2f}"], ["Gastos de personal", f"{op['payroll']:,.2f}"], ["Otros gastos", f"{op['other_expenses']:,.2f}"], ["Resultado preliminar", f"{op['net_result']:,.2f}"]]
+    table = Table(rows, colWidths=[125 * mm, 45 * mm], hAlign="LEFT")
+    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f5666")), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white), ("GRID", (0, 0), (-1, -1), .35, colors.HexColor("#cbd9dc")), ("ALIGN", (1, 1), (1, -1), "RIGHT"), ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#eef5f5")), ("BOTTOMPADDING", (0, 0), (-1, -1), 7), ("TOPPADDING", (0, 0), (-1, -1), 7)]))
+    story.append(table)
+    story.append(Spacer(1, 5 * mm))
+    story.append(Paragraph("Documento generado por el ERP independiente. Validar con el contador responsable antes de presentar información tributaria oficial.", styles["Italic"]))
+    document.build(story)
+    buffer.seek(0)
+    return Response(content=buffer.getvalue(), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@app.get("/accounts/cash-flow")
+def cash_flow(company_id: int, year: int | None = None, token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
+    require_accounts(token)
+    connection = connect()
+    try:
+        with connection.cursor() as cursor:
+            params: list = [company_id]
+            year_clause = ""
+            if year:
+                year_clause = " AND YEAR(movement_date) = %s"
+                params.append(year)
+            cursor.execute(f"SELECT DATE_FORMAT(movement_date, '%%Y-%%m') AS month, COALESCE(SUM(CASE WHEN direction = 'inflow' THEN amount ELSE 0 END), 0) AS inflows, COALESCE(SUM(CASE WHEN direction = 'outflow' THEN amount ELSE 0 END), 0) AS outflows, COUNT(*) AS movements FROM acc_cash_movements WHERE company_id = %s{year_clause} GROUP BY DATE_FORMAT(movement_date, '%%Y-%%m') ORDER BY month", params)
+            monthly = cursor.fetchall()
+            cursor.execute(f"SELECT category, direction, COALESCE(SUM(amount), 0) AS total FROM acc_cash_movements WHERE company_id = %s{year_clause} GROUP BY category, direction ORDER BY total DESC", params)
+            by_category = cursor.fetchall()
+    finally:
+        connection.close()
+    return {"company_id": company_id, "year": year, "monthly": monthly, "by_category": by_category}
+
+
 @app.get("/accounts/companies")
 def accounts_companies(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
     require_accounts(token)
@@ -3256,6 +4973,7 @@ def modules(token: str | None = Cookie(default=None, alias=SESSION_COOKIE)):
     available_modules = [
             {"key": "overview", "label": "Resumen", "status": "active", "description": "Estado de la plataforma independiente."},
             {"key": "accounts", "label": "Finanzas", "status": "active", "description": "Dashboard, cuentas y operación financiera propia."},
+            {"key": "accounting", "label": "Contabilidad", "status": "active", "description": "Plan de cuentas, periodos fiscales y asientos contables."},
             {"key": "selling", "label": "Ventas", "status": "planned", "description": "Clientes, cotizaciones y órdenes de servicio."},
             {"key": "hr", "label": "RR.HH.", "status": "active", "description": "Personal, mano de obra temporal, asignaciones y planilla."},
             {"key": "purchases", "label": "Compras", "status": "planned", "description": "Proveedores, solicitudes, cotizaciones y órdenes de compra."},
