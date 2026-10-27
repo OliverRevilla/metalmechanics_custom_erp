@@ -1,93 +1,88 @@
-# Merge after deployment/docker-compose.yml for the isolated candidate.
-name: metalmecanica-independent-compare
-
-x-independent-env: &independent-env
-  SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
-  REQUIRED_APPS: erpnext
-  TZ: America/Lima
-  PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
-
-x-independent-app: &independent-app
-  image: ${INDEPENDENT_IMAGE:-metalmecanica-erp:independent}
-  pull_policy: never
-  environment: *independent-env
+# Fully standalone FastAPI/MySQL/Redis stack.
+name: metalmecanica-independent
 
 services:
-  ind-api:
-    <<: *independent-app
-    command: [env/bin/uvicorn, metalmecanica_ind.service.main:app, --host, 0.0.0.0, --port, "8001"]
-    secrets:
-      - db_root_password
+  mysql:
+    image: ${MYSQL_IMAGE:-mariadb:11.8.9@sha256:d689f65e09e887e96db5c40ca3957dd9f4e3fad3516baec96d7726c78a5fc2ee}
+    restart: unless-stopped
     environment:
-      <<: *independent-env
-      IND_DB_HOST: db
-      IND_DB_NAME: metalmecanica_ind
-      IND_DB_PASSWORD_FILE: /run/secrets/db_root_password
+      MARIADB_DATABASE: ${INDEPENDENT_DB_NAME:-metalmecanica_ind}
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      TZ: America/Lima
+    secrets:
+      - mysql_root_password
+    volumes:
+      - independent-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      start_period: 30s
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:8.6.7-alpine@sha256:019e4fb3c6de024c8f70ab5219d4abded5f335de770876981c7b0a051c43df87}
+    restart: unless-stopped
+    command: [redis-server, --appendonly, "yes"]
+    volumes:
+      - independent-redis-data:/data
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  api:
+    image: ${INDEPENDENT_IMAGE:-metalmecanica-erp:independent}
+    build:
+      context: ../..
+      dockerfile: deployment/Dockerfile.independent
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE:-python:3.14.8-slim-trixie@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9}
+    restart: unless-stopped
+    pull_policy: never
+    environment:
+      IND_DB_HOST: mysql
+      IND_DB_PORT: "3306"
+      IND_DB_NAME: ${INDEPENDENT_DB_NAME:-metalmecanica_ind}
+      IND_DB_USER: root
+      IND_DB_PASSWORD_FILE: /run/secrets/mysql_root_password
+      IND_REDIS_URL: redis://redis:6379/0
       IND_ADMIN_USERNAME: ${INDEPENDENT_ADMIN_USERNAME:-admin}
       IND_ADMIN_EMAIL: ${INDEPENDENT_ADMIN_EMAIL:-admin@example.invalid}
       IND_ADMIN_PASSWORD: ${INDEPENDENT_ADMIN_PASSWORD:?Set INDEPENDENT_ADMIN_PASSWORD in deployment/.env}
       IND_SEED_DUMMY_DATA: ${INDEPENDENT_SEED_DUMMY_DATA:-true}
-    depends_on:
-      db:
-        condition: service_healthy
-
-  configurator:
-    <<: *independent-app
-  backend:
-    <<: *independent-app
-    build:
-      context: ..
-      dockerfile: deployment/Dockerfile.independent
-  frontend:
-    <<: *independent-app
-    environment:
-      SITE_NAME: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
-      REQUIRED_APPS: erpnext
+      IND_DATA_ROOT: /var/lib/metalmecanica/data
       TZ: America/Lima
-      PATH: /opt/tools/bin:/home/frappe/frappe-bench/env/bin:/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
-      BACKEND: backend:8000
-      SOCKETIO: websocket:9000
-      INDEPENDENT_API: ind-api:8001
-      FRAPPE_SITE_NAME_HEADER: ${INDEPENDENT_SITE_NAME:-metalmecanica-ind.localhost}
-      NGINX_LISTEN_PORT: "8080"
-      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
-      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
-      UPSTREAM_REAL_IP_RECURSIVE: "off"
-      PROXY_READ_TIMEOUT: "120"
-      CLIENT_MAX_BODY_SIZE: 50m
+    secrets:
+      - mysql_root_password
+    volumes:
+      - independent-app-data:/var/lib/metalmecanica/data
+    ports:
+      - "127.0.0.1:8081:8000"
     depends_on:
-      ind-api:
-        condition: service_started
-    ports: !override
-      - "127.0.0.1:8081:8080"
-  websocket:
-    <<: *independent-app
-  queue-short:
-    <<: *independent-app
-  queue-long:
-    <<: *independent-app
-  scheduler:
-    <<: *independent-app
-  bootstrap:
-    <<: *independent-app
-  backup:
-    <<: *independent-app
-  restore:
-    <<: *independent-app
-  tools:
-    <<: *independent-app
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      start_period: 30s
+      interval: 15s
+      timeout: 5s
+      retries: 8
 
-# Explicit names make the isolation survive Compose project-name precedence
-# and prevent this stack from ever resolving to the stable volumes.
+secrets:
+  mysql_root_password:
+    file: ../.secrets/db_root_password
+
 volumes:
-  sites:
-    name: metalmecanica-independent-sites
-  logs:
-    name: metalmecanica-independent-logs
-  db-data:
-    name: metalmecanica-independent-db-data
-  redis-queue-data:
-    name: metalmecanica-independent-redis-queue-data
+  independent-mysql-data:
+    name: metalmecanica-independent-mysql-data
+  independent-redis-data:
+    name: metalmecanica-independent-redis-data
+  independent-app-data:
+    name: metalmecanica-independent-app-data
 
 
 

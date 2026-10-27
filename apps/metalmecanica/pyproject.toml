@@ -1,19 +1,12 @@
 [project]
-name = "metalmecanica"
-description = "Modular ETO extensions for ERPNext"
+name = "metalmecanica_ind"
+description = "Experimental independent ERP capabilities for comparison"
 requires-python = ">=3.14,<3.15"
 dynamic = ["version"]
-dependencies = [] # Frappe and ERPNext are installed and managed by Bench.
+dependencies = []
 
 [build-system]
 requires = ["flit_core>=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
 [tool.bench.dev-dependencies]
-
-[tool.ruff]
-line-length = 110
-target-version = "py314"
-
-[tool.ruff.format]
-indent-style = "tab"

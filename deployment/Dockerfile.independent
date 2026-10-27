@@ -1,14 +1,32 @@
-# Experimental image: it does not read vendor/ directly.
-# The baseline image supplies the pinned Frappe/ERPNext runtime while this
-# image adds only the independent application under apps_ind/.
-ARG BASE_IMAGE=metalmecanica-erp:dev
-FROM ${BASE_IMAGE}
+# Standalone image for the independent FastAPI ERP.
+# This image deliberately has no Frappe, ERPNext, Bench, Node or vendor dependency.
+# syntax=docker/dockerfile:1
 
-USER root
-COPY apps_ind/metalmecanica/ /home/frappe/frappe-bench/apps/metalmecanica_ind/
-COPY deployment/independent-requirements.txt /opt/metalmecanica/independent-requirements.txt
-COPY deployment/nginx.independent.conf.template /templates/nginx/frappe.conf.template
-RUN chown -R frappe:0 /home/frappe/frappe-bench/apps/metalmecanica_ind \
- && su -s /bin/bash frappe -c 'uv pip install --python /home/frappe/frappe-bench/env/bin/python --no-deps --no-build-isolation -e /home/frappe/frappe-bench/apps/metalmecanica_ind && uv pip install --python /home/frappe/frappe-bench/env/bin/python -r /opt/metalmecanica/independent-requirements.txt' \
- && printf 'frappe\nerpnext\n' > /home/frappe/frappe-bench/sites/apps.txt
-USER frappe
+ARG PYTHON_IMAGE=python:3.14.8-slim-trixie@sha256:cfe2e24a75302a15934d37c2d86412893c0aa934dc3a97cbb439d04c01890ca9
+FROM ${PYTHON_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH=/opt/venv/bin:$PATH \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin metalmecanica \
+ && python -m venv /opt/venv \
+ && mkdir -p /opt/metalmecanica/app /var/lib/metalmecanica/data \
+ && chown -R metalmecanica:metalmecanica /opt/metalmecanica /var/lib/metalmecanica
+
+COPY deployment/independent-requirements.txt /opt/metalmecanica/requirements.txt
+RUN pip install --no-cache-dir -r /opt/metalmecanica/requirements.txt
+
+COPY apps/metalmecanica/ /opt/metalmecanica/app/
+RUN pip install --no-cache-dir --no-deps -e /opt/metalmecanica/app \
+ && chown -R metalmecanica:metalmecanica /opt/metalmecanica
+
+WORKDIR /opt/metalmecanica/app
+USER metalmecanica
+
+EXPOSE 8000
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=6 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+
+CMD ["uvicorn", "metalmecanica_ind.service.main:app", "--host", "0.0.0.0", "--port", "8000"]

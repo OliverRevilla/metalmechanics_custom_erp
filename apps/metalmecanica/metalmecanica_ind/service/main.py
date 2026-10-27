@@ -41,7 +41,7 @@ SEED_DUMMY_DATA = os.getenv("IND_SEED_DUMMY_DATA", "false").lower() in {"1", "tr
 SESSION_COOKIE = "ind_session"
 SESSION_TTL_SECONDS = 60 * 60 * 8
 STATIC_INDEX = Path(__file__).with_name("static") / "index.html"
-DATA_ROOT = Path(os.getenv("IND_DATA_ROOT", "/home/frappe/frappe-bench/sites/independent-data"))
+DATA_ROOT = Path(os.getenv("IND_DATA_ROOT", "/var/lib/metalmecanica/data"))
 ALLOWED_FILE_EXTENSIONS = {".pdf", ".csv", ".txt"}
 SERVICE_ORDER_FILE_EXTENSIONS = {".pdf", ".doc", ".docx", ".txt"}
 PROJECT_AREAS = {
@@ -1400,6 +1400,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="Metalmecanica Independent API", version="0.1.0", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=STATIC_INDEX.parent), name="static")
+app.mount("/ind/static", StaticFiles(directory=STATIC_INDEX.parent), name="legacy-static")
 
 
 @app.get("/health")
@@ -1409,6 +1410,12 @@ def health():
 
 @app.get("/")
 def index():
+    return FileResponse(STATIC_INDEX)
+
+
+@app.get("/ind", include_in_schema=False)
+@app.get("/ind/", include_in_schema=False)
+def legacy_index():
     return FileResponse(STATIC_INDEX)
 
 

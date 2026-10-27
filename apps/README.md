@@ -1,9 +1,9 @@
 # Aplicaciones independientes
 
-`apps_ind/` contiene implementaciones experimentales que se comparan con la aplicación estable de `apps/` sin modificar su arranque ni sus volúmenes.
+`apps/metalmecanica/` contiene la aplicación autónoma del ERP metalmecánico. Su servicio FastAPI se ejecuta en un stack propio y no depende de Frappe ni ERPNext.
 
 ```text
-apps_ind/
+apps/
 ├── README.md
 └── metalmecanica/
     ├── README.md
@@ -18,4 +18,4 @@ apps_ind/
             └── test_api.py
 ```
 
-La app independiente usa el nombre técnico `metalmecanica_ind` para evitar colisiones con `metalmecanica`.
+La app usa el nombre técnico `metalmecanica_ind` para mantener separado su paquete autónomo de cualquier código Frappe histórico.

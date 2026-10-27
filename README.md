@@ -16,11 +16,11 @@ Workspace autorizado: `C:\Users\olive\Proyectos\metalmechanics_custom_erp`. Se u
 | ERPNext | v16.51.1 | 5af6561f5aa48104559692fb4fd82f2580e8d338 |
 | frappe_docker | snapshot del 2026-10-20 | df2a3b72910634cf0e878b59eccf68a93736bf9d |
 
-Las fuentes externas son submódulos en `vendor/`. La aplicación propia estable vive en `apps/metalmecanica/`. La vía experimental paralela vive en `apps_ind/metalmecanica/`; reutiliza la imagen estable como base y permite comparar una app independizada sin cambiar el arranque principal.
+Las fuentes del entorno estable siguen siendo submódulos en `vendor/`. La aplicación autónoma vive en `apps/metalmecanica/` y se ejecuta con su propio stack FastAPI/MySQL/Redis; no depende de la imagen estable ni de Frappe/ERPNext.
 
 Al preparar otra copia autorizada del proyecto, usar `git submodule update --init --recursive` para recuperar los commits registrados. Evitar `git submodule update --remote` en construcciones. Las actualizaciones deben revisar los cambios y actualizar los punteros junto con el registro de fuentes.
 
-Para iniciar el entorno local, usa `.\deployment\erp.ps1 -Action Start`. La interfaz queda en [http://127.0.0.1:8080](http://127.0.0.1:8080). La contraseña inicial de `Administrator` se conserva únicamente en `deployment/.secrets/admin_password`.`r`n`r`nPara levantar la comparación independiente, ejecuta `.\deployment\erp-independent.ps1 -Action Start`. Queda en [http://127.0.0.1:8081](http://127.0.0.1:8081), con el sitio `metalmecanica-ind.localhost`, proyecto Compose y volúmenes propios. La guía detallada está en [apps_ind/metalmecanica/README.md](apps_ind/metalmecanica/README.md).
+Para iniciar el entorno estable, usa `.\deployment\erp.ps1 -Action Start`. La interfaz queda en [http://127.0.0.1:8080](http://127.0.0.1:8080). Para levantar el ERP autónomo, ejecuta `.\deployment\erp-independent.ps1 -Action Start`; queda en [http://127.0.0.1:8081](http://127.0.0.1:8081), con volúmenes propios y sin servicios Frappe. La guía está en [apps/metalmecanica/README.md](apps/metalmecanica/README.md).
 
 ## Documentación
 
@@ -139,5 +139,5 @@ Cada área tiene su propio mapa detallado: [apps/metalmecanica/README.md](apps/m
 
 ## Vía experimental independiente
 
-El árbol pps_ind/ contiene las implementaciones que se compararán con Frappe/ERPNext. deployment/Dockerfile.independent parte de la imagen estable y agrega únicamente la app experimental; deployment/config/compose.independent.yml y deployment/erp-independent.ps1 la levantan en el proyecto metalmecanica-independent-compare, con puerto 8081 y volúmenes separados. No se eliminan ni comparten datos con el proyecto estable.
+La variante autónoma vive en `apps/metalmecanica/` y se construye con `deployment/Dockerfile.independent`. `deployment/config/compose.independent.yml` levanta únicamente `api`, `mysql` y `redis` en el proyecto `metalmecanica-independent`, con puerto `8081` y volúmenes separados. No comparte datos ni imagen con el entorno estable.
 

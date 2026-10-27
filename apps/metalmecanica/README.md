@@ -1,37 +1,35 @@
-# App `metalmecanica`
+# `metalmecanica_ind`
 
-Aplicación propia de Frappe. Aquí vivirá la lógica y los DocTypes específicos de la empresa metalmecánica; ERPNext y Frappe permanecen en `vendor/` y no se editan desde esta app.
+Esta aplicación contiene el ERP autónomo para la operación metalmecánica. El servicio no importa ni invoca Frappe o ERPNext; expone la interfaz web y la API directamente mediante FastAPI.
 
 ```text
 apps/metalmecanica/
-├── DEVOPS.md                     # Procedimiento de cambios de la app
-├── README.md                     # Este mapa
-├── pyproject.toml                # Metadatos y dependencias de la app
-└── metalmecanica/
-    ├── __init__.py               # Versión de la app
-    ├── api.py                    # Métodos HTTP propios
-    ├── hooks.py                  # Integración con el ciclo de Frappe
-    ├── modules.txt               # Módulos Frappe instalables
-    ├── patches.txt               # Patches versionados de la app
-    ├── .frappe                   # Marcador de app Frappe
-    ├── config/
-    │   └── __init__.py
-    ├── metalmecanica/
-    │   └── __init__.py           # Paquete del módulo funcional inicial
-    ├── patches/
-    │   └── __init__.py
-    ├── public/
-    │   ├── .gitkeep
-    │   ├── css/.gitkeep
-    │   └── js/.gitkeep
-    ├── templates/
-    │   ├── __init__.py
-    │   ├── includes/.gitkeep
-    │   └── pages/__init__.py
-    ├── tests/
-    │   ├── __init__.py
-    │   └── test_api.py
-    └── www/.gitkeep
+├── README.md
+├── pyproject.toml
+└── metalmecanica_ind/
+    ├── __init__.py               # Versión de la app experimental
+    ├── public/                   # CSS y JavaScript propios del candidato
+    ├── service/                  # API FastAPI, persistencia y login propios
+    └── tests/                    # Pruebas del servicio independiente
 ```
 
-El marcador de desarrollo actual es `metalmecanica-dev-001`. Los nuevos DocTypes deben organizarse dentro de `metalmecanica/` en la estructura estándar de Frappe y acompañarse de pruebas en `tests/`.
+## Prueba local
+
+El entorno autónomo usa una imagen, proyecto Compose y volúmenes propios, con el puerto `8081`:
+
+```powershell
+.\deployment\erp-independent.ps1 -Action Init
+.\deployment\erp-independent.ps1 -Action Build
+.\deployment\erp-independent.ps1 -Action Start
+.\deployment\erp-independent.ps1 -Action Verify
+```
+
+URLs:
+
+- ERP autónomo: `http://127.0.0.1:8081`
+
+La pantalla web está en `http://127.0.0.1:8081/`. El setup crea un usuario
+inicial en MySQL y la API usa las mismas rutas bajo el proceso FastAPI.
+Sus tablas usan el prefijo `ind_`.
+
+Los datos persistentes viven en volúmenes propios de MySQL, Redis y archivos de la aplicación. La imagen autónoma copia únicamente `apps/metalmecanica/` y sus dependencias FastAPI.

@@ -1,6 +1,6 @@
 # Modelo de datos independiente
 
-Este documento define el modelo de `apps_ind`. La aplicación no reutiliza DocTypes,
+Este documento define el modelo de la aplicación autónoma `metalmecanica_ind`. La aplicación no reutiliza DocTypes,
 ORM, permisos ni tablas de Frappe/ERPNext. Los nombres `acc_*` pertenecen al dominio
 contable propio y deben evolucionar mediante migraciones explícitas.
 
@@ -360,16 +360,16 @@ proyecto terminado tiene fecha de término para validar el Gantt.
 
 ## KPIs y Gantt
 
-`GET /ind-api/sales/dashboard` expone clientes activos, cotizaciones, subtotal y
+`GET /sales/dashboard` expone clientes activos, cotizaciones, subtotal y
 total con IGV, órdenes de servicio, órdenes en curso, órdenes que vencen en 30 días
 y visitas técnicas pendientes. Son indicadores operativos; la conversión comercial
 se incorporará cuando se formalice el estado de aprobación de las cotizaciones.
 
-`GET /ind-api/projects/dashboard` expone proyectos activos, completados y vencidos,
+`GET /projects/dashboard` expone proyectos activos, completados y vencidos,
 tareas activas, tareas y días de tiempo muerto, además de documentación aprobada
 frente al total y un resumen por proyecto.
 
-`GET /ind-api/projects/gantt?project_id=<id>` devuelve el proyecto elegido y sus
+`GET /projects/gantt?project_id=<id>` devuelve el proyecto elegido y sus
 tareas con fechas planificadas y reales. El frontend dibuja el diagrama por proyecto;
 las tareas documentales aparecen como tiempo muerto y las tareas completadas se
 colorean de forma distinta. La fecha final comprometida proviene de la Orden de
